@@ -1,26 +1,113 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  /* Brand colors */
+  --color-primary: #81533a;
+  --color-on-primary: #ffffff;
+  --color-primary-container: #c58e71;
+  --color-on-primary-container: #4e2913;
+  --color-primary-fixed: #ffdbca;
+  --color-primary-fixed-dim: #f6b99a;
+  --color-on-primary-fixed: #321201;
+  --color-on-primary-fixed-variant: #663c25;
+  --color-inverse-primary: #f6b99a;
+
+  --color-secondary: #516351;
+  --color-on-secondary: #ffffff;
+  --color-secondary-container: #d4e8d1;
+  --color-on-secondary-container: #576957;
+  --color-secondary-fixed: #d4e8d1;
+  --color-secondary-fixed-dim: #b8ccb6;
+  --color-on-secondary-fixed: #0f1f11;
+  --color-on-secondary-fixed-variant: #3a4b3a;
+
+  --color-tertiary: #615e57;
+  --color-on-tertiary: #ffffff;
+  --color-tertiary-container: #9e9a92;
+  --color-on-tertiary-container: #35322c;
+  --color-tertiary-fixed: #e8e2d9;
+  --color-tertiary-fixed-dim: #cbc6bd;
+  --color-on-tertiary-fixed: #1d1b16;
+  --color-on-tertiary-fixed-variant: #494640;
+
+  --color-error: #ba1a1a;
+  --color-on-error: #ffffff;
+  --color-error-container: #ffdad6;
+  --color-on-error-container: #93000a;
+
+  --color-surface: #faf9f8;
+  --color-on-surface: #1a1c1c;
+  --color-surface-variant: #e3e2e1;
+  --color-on-surface-variant: #51443e;
+  --color-surface-dim: #dadad9;
+  --color-surface-bright: #faf9f8;
+  --color-surface-tint: #81533a;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #f4f3f2;
+  --color-surface-container: #eeeeed;
+  --color-surface-container-high: #e9e8e7;
+  --color-surface-container-highest: #e3e2e1;
+
+  --color-outline: #84746d;
+  --color-outline-variant: #d6c3ba;
+
+  --color-background: #faf9f8;
+  --color-on-background: #1a1c1c;
+
+  --color-inverse-surface: #2f3130;
+  --color-inverse-on-surface: #f1f0ef;
+
+  /* Border radius */
+  --radius: 1rem;
+  --radius-lg: 2rem;
+  --radius-xl: 3rem;
+  --radius-full: 9999px;
+
+  /* Fonts — next/font variables set on <html> */
+  --font-headline: var(--font-plus-jakarta-sans), "Plus Jakarta Sans", sans-serif;
+  --font-body: var(--font-inter), Inter, sans-serif;
+  --font-label: var(--font-inter), Inter, sans-serif;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* Material Symbols icon style */
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+/* Scrollbar hide */
+.hide-scrollbar::-webkit-scrollbar,
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.hide-scrollbar,
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  min-height: max(884px, 100dvh);
 }
+
+/* Active nav pill */
+.active-nav-pill {
+  background: linear-gradient(to right, #81533a, #c58e71);
+  color: white !important;
+  border-radius: 9999px;
+  box-shadow: 0 4px 12px rgba(129, 83, 58, 0.2);
+}
+
+/* Slow zoom hero animation */
+@keyframes slow-zoom {
+  0%   { transform: scale(1.1); }
+  50%  { transform: scale(1.2); }
+  100% { transform: scale(1.1); }
+}
+.img-zoom-out {
+  animation: slow-zoom 20s ease-in-out infinite;
+}
+
+/* Rounded destination cards */
+.destination-card {
+  border-radius: 2rem;
+}
+
+/* Icon size helpers (Material Symbols rendered via font-size) */
+.icon-sm  { font-size: 1.25rem; }
+.icon-md  { font-size: 1.5rem; }
+.icon-lg  { font-size: 2rem; }
