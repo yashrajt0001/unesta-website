@@ -10,6 +10,7 @@ export default function BottomNav() {
     { href: "/", icon: "home", fill: true },
     { href: "/search", icon: "search", fill: false },
     { href: "/wishlists", icon: "favorite", fill: false },
+    { href: "/login", icon: "person", fill: false },
   ];
 
   return (

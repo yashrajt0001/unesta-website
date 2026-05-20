@@ -48,10 +48,16 @@ export default function TopAppBar({ onMenuClick }: TopAppBarProps) {
       </div>
 
       {/* Right actions */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 sm:gap-4">
         <button className="hidden lg:inline-flex items-center justify-center py-2 px-4 rounded-full bg-primary text-white text-sm font-semibold hover:bg-primary-container transition-all">
           Become a Host
         </button>
+        <Link
+          href="/login"
+          className="text-on-surface-variant hover:text-primary transition-colors text-sm font-semibold"
+        >
+          Login
+        </Link>
         <button
           className="text-on-surface-variant hover:opacity-80 transition-opacity p-1"
           onClick={onMenuClick}
