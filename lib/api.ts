@@ -1,4 +1,4 @@
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
 type ApiEnvelope<T> = {
   success: boolean;
@@ -43,7 +43,7 @@ export type ListingCard = {
   };
 };
 
-export type ListingDetails = ListingCard & {
+export type ListingDetails = Omit<ListingCard, "images"> & {
   description: string;
   beds: number;
   cleaningFee: number;

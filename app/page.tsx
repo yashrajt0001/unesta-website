@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Footer from "@/components/layout/Footer";
 import SearchModal from "@/components/layout/SearchModal";
+import { SkeletonStayCard } from "@/components/ui/Skeleton";
 import { fetchPublishedListings, type ListingCard } from "@/lib/api";
 
 const currency = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 });
@@ -64,16 +65,22 @@ export default function StaysPage() {
       <section className="space-y-4 mb-10">
         <div className="px-4 sm:px-6 flex justify-between items-end gap-2">
           <h3 className="text-lg sm:text-xl font-headline font-bold text-on-surface">Live Stays</h3>
-          <span className="text-xs text-on-surface-variant">{stays.length} listings</span>
+          <span className="text-xs text-on-surface-variant">{loading ? "Loading…" : `${stays.length} listings`}</span>
         </div>
 
-        {loading && <p className="px-4 sm:px-6 text-on-surface-variant">Loading listings...</p>}
+        {loading && (
+          <div className="flex overflow-x-auto gap-4 sm:gap-6 px-4 sm:px-6 hide-scrollbar">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <SkeletonStayCard key={i} />
+            ))}
+          </div>
+        )}
         {error && <p className="px-4 sm:px-6 text-red-600">{error}</p>}
         {!loading && !error && stays.length === 0 && (
           <p className="px-4 sm:px-6 text-on-surface-variant">No published listings available yet.</p>
         )}
 
-        {featured.length > 0 && (
+        {!loading && featured.length > 0 && (
           <div className="flex overflow-x-auto gap-4 sm:gap-6 px-4 sm:px-6 hide-scrollbar">
             {featured.map((stay) => <StayCard key={stay.id} stay={stay} />)}
           </div>
