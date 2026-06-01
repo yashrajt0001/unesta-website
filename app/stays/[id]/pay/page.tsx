@@ -1,14 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
+  ApiError,
+  bookingsApi,
   fetchListingDetails,
   fetchPriceBreakdown,
   type ListingDetails,
   type PriceBreakdown,
 } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
+import { useRequireAuth } from "@/lib/use-require-auth";
+import { useToast } from "@/lib/toast";
 import { Skeleton } from "@/components/ui/Skeleton";
 
 const currency = new Intl.NumberFormat("en-IN", {
@@ -20,264 +25,376 @@ const currency = new Intl.NumberFormat("en-IN", {
 const shortDate = (d: string) =>
   new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
-export default function PaymentPage() {
-  const params = useParams<{ id: string }>();
-  const searchParams = useSearchParams();
-  const id = params.id;
+function isValidEmail(s: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim());
+}
 
-  const checkIn = searchParams.get("checkIn") || "2026-10-12";
-  const checkOut = searchParams.get("checkOut") || "2026-10-15";
-  const guests = Number(searchParams.get("guests") || "2");
+export default function PaymentPage() {
+  return (
+    <Suspense fallback={<PaySkeleton />}>
+      <PaymentInner />
+    </Suspense>
+  );
+}
+
+function PaymentInner() {
+  const params = useParams<{ id: string }>();
+  const search = useSearchParams();
+  const router = useRouter();
+  const toast = useToast();
+
+  const id = params.id;
+  const checkIn = search.get("checkIn") || "";
+  const checkOut = search.get("checkOut") || "";
+  const guests = Number(search.get("guests") || "0");
+
+  const { isLoading: authLoading, isAuthenticated } = useRequireAuth();
+  const { user } = useAuth();
 
   const [listing, setListing] = useState<ListingDetails | null>(null);
   const [pricing, setPricing] = useState<PriceBreakdown | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [specialRequests, setSpecialRequests] = useState("");
+  const [errors, setErrors] = useState<{ [k: string]: string }>({});
+  const [submitting, setSubmitting] = useState(false);
+
+  const paramsValid =
+    !!checkIn && !!checkOut && guests > 0 && new Date(checkOut) > new Date(checkIn);
 
   useEffect(() => {
-    fetchListingDetails(id).then(setListing).catch(() => setListing(null));
+    if (!user) return;
+    setFullName(
+      [user.firstName, user.lastName].filter(Boolean).join(" ").trim(),
+    );
+    setEmail(user.email ?? "");
+    setPhone(user.phone ?? "");
+  }, [user]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !paramsValid) return;
+    let cancelled = false;
+    fetchListingDetails(id)
+      .then((d) => !cancelled && setListing(d))
+      .catch((e) => {
+        if (!cancelled)
+          setLoadError(
+            e instanceof ApiError ? e.message : "Could not load stay.",
+          );
+      });
     fetchPriceBreakdown({ listingId: id, checkIn, checkOut, guests })
-      .then(setPricing)
-      .catch(() => setPricing(null));
-  }, [id, checkIn, checkOut, guests]);
+      .then((p) => !cancelled && setPricing(p))
+      .catch(() => !cancelled && setPricing(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [id, checkIn, checkOut, guests, isAuthenticated, paramsValid]);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const nextErrors: typeof errors = {};
+    if (!fullName.trim()) nextErrors.fullName = "Full name is required.";
+    if (!email.trim() || !isValidEmail(email)) {
+      nextErrors.email = "Valid email is required.";
+    }
+    if (!phone.trim() || !/^\+?\d{10,15}$/.test(phone.trim())) {
+      nextErrors.phone = "Valid phone number is required.";
+    }
+    if (specialRequests.length > 500) {
+      nextErrors.specialRequests = "Keep special requests under 500 characters.";
+    }
+    if (Object.keys(nextErrors).length) {
+      setErrors(nextErrors);
+      return;
+    }
+    setErrors({});
+    setSubmitting(true);
+    try {
+      const booking = await bookingsApi.create({
+        listingId: id,
+        checkInDate: checkIn,
+        checkOutDate: checkOut,
+        numGuests: guests,
+        specialRequests: specialRequests.trim() || undefined,
+      });
+      toast.success(
+        booking.status === "CONFIRMED"
+          ? "Booking confirmed!"
+          : "Booking submitted. Awaiting host approval.",
+      );
+      router.push("/trips");
+    } catch (err) {
+      toast.error(
+        err instanceof ApiError ? err.message : "Could not create booking.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (authLoading || !isAuthenticated) return <PaySkeleton />;
+
+  if (!paramsValid) {
+    return (
+      <div className="max-w-2xl mx-auto p-6 mt-8">
+        <div className="rounded-2xl bg-error-container/40 p-6 text-on-error-container">
+          <p className="font-semibold">Missing booking details</p>
+          <Link
+            href={`/stays/${id}`}
+            className="inline-block mt-2 text-sm font-bold underline"
+          >
+            Back to listing
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="max-w-2xl mx-auto p-6 mt-8">
+        <div className="rounded-2xl bg-error-container/40 p-6 text-on-error-container">
+          <p className="font-semibold">Couldn’t load this booking</p>
+          <p className="text-sm mt-1">{loadError}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!listing) return <PaySkeleton />;
 
   const cover =
-    listing?.images.find((i) => i.isCover)?.url ||
-    listing?.images[0]?.url ||
-    "https://lh3.googleusercontent.com/aida-public/AB6AXuAfVhG-A9Z4NE4O4VD3__E-K3Veue6SYqTog_sJd5ZJpUQ-qJFw-xewyI-7Hc3TY5GYs4XylBlCCRdZ6KnuC6TpccCjmkwKlKqDiJBdsvpyFDR2mn6VHQY5COUXkH9mgpW39_ReIZ6bBeAU9wtKw1RwmSC4lM3ExbOdj1KbYBLnR9Po1Rk4Fb0KNli9wumMPXq4Nz18JGjLKHzQllPF5tQoZYKAVd_jB5QhNXlMOUKOkY3X9496pECD_WnQJspLIR8ohGrR6uHgGz8";
+    listing.images.find((i) => i.isCover)?.url ||
+    listing.images[0]?.url ||
+    "https://via.placeholder.com/600x400?text=No+Image";
 
   return (
-    <main className="mt-8 px-6 max-w-2xl mx-auto space-y-8 pb-32">
+    <main className="max-w-2xl mx-auto px-4 sm:px-6 py-6 space-y-8 pb-20">
       <Link
         href={`/stays/${id}/book?checkIn=${checkIn}&checkOut=${checkOut}&guests=${guests}`}
-        className="text-primary inline-flex items-center gap-2"
+        className="text-primary inline-flex items-center gap-2 text-sm font-semibold hover:underline"
       >
         <span className="material-symbols-outlined">arrow_back</span>
         Back
       </Link>
 
-      {!listing ? (
-        <>
-          <section>
-            <div className="bg-surface-container-lowest p-4 flex gap-4 items-center rounded-lg shadow-[0_4px_20px_rgba(26,28,28,0.04)]">
-              <Skeleton className="w-24 h-24 rounded-2xl flex-shrink-0" />
-              <div className="flex-1 space-y-2">
-                <Skeleton className="h-3 w-24" />
-                <Skeleton className="h-5 w-3/4" />
-                <Skeleton className="h-3 w-1/2" />
-              </div>
-            </div>
-          </section>
-          <section className="space-y-6">
-            <Skeleton className="h-6 w-40" />
-            <Skeleton className="h-14 w-full rounded-2xl" />
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Skeleton className="h-14 rounded-2xl" />
-              <Skeleton className="h-14 rounded-2xl" />
-            </div>
-          </section>
-          <section className="space-y-6">
-            <Skeleton className="h-6 w-44" />
-            <div className="bg-surface-container-low p-6 rounded-lg space-y-6">
-              <div className="flex items-center gap-3">
-                <Skeleton className="w-10 h-10 rounded-full" />
-                <div className="space-y-2">
-                  <Skeleton className="h-3 w-24" />
-                  <Skeleton className="h-4 w-32" />
-                </div>
-              </div>
-              <Skeleton className="h-20 w-full rounded-2xl" />
-            </div>
-          </section>
-          <section className="pt-4">
-            <div className="bg-surface-container-lowest p-6 rounded-lg space-y-4 border border-outline-variant/10">
-              <Skeleton className="h-5 w-32" />
-              {Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="flex justify-between">
-                  <Skeleton className="h-3 w-32" />
-                  <Skeleton className="h-3 w-16" />
-                </div>
-              ))}
-              <div className="pt-4 border-t border-outline-variant/20 flex justify-between">
-                <Skeleton className="h-5 w-24" />
-                <Skeleton className="h-7 w-28" />
-              </div>
-            </div>
-          </section>
-          <Skeleton className="h-14 w-full rounded-full" />
-        </>
-      ) : (
-        <>
-          {/* Property summary */}
-          <section>
-            <div className="bg-surface-container-lowest p-4 flex gap-4 items-center rounded-lg shadow-[0_4px_20px_rgba(26,28,28,0.04)]">
-              <div className="w-24 h-24 rounded-2xl overflow-hidden flex-shrink-0">
-                <img
-                  className="w-full h-full object-cover"
-                  src={cover}
-                  alt={listing.title}
-                />
-              </div>
-              <div className="flex flex-col">
-                <span className="text-xs font-label text-primary font-bold uppercase tracking-widest mb-1">
-                  Boutique Stay
-                </span>
-                <h2 className="font-headline text-lg font-bold text-on-surface leading-tight">
-                  {listing.title}
-                </h2>
-                <p className="text-sm text-on-surface-variant mt-1 flex items-center gap-1">
-                  <span className="material-symbols-outlined text-[16px]">
-                    calendar_today
-                  </span>
-                  {shortDate(checkIn)} - {shortDate(checkOut)}
-                </p>
-              </div>
-            </div>
-          </section>
+      <section className="bg-surface-container-lowest p-4 flex gap-4 items-center rounded-2xl shadow-[0_4px_20px_rgba(26,28,28,0.04)]">
+        <div className="w-24 h-24 rounded-xl overflow-hidden flex-shrink-0">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={cover} alt={listing.title} className="w-full h-full object-cover" />
+        </div>
+        <div className="min-w-0">
+          <h1 className="font-headline text-lg font-bold leading-tight line-clamp-2">
+            {listing.title}
+          </h1>
+          <p className="text-sm text-on-surface-variant mt-1 flex items-center gap-1">
+            <span className="material-symbols-outlined text-[16px]">
+              calendar_today
+            </span>
+            {shortDate(checkIn)} – {shortDate(checkOut)} · {guests} guest
+            {guests === 1 ? "" : "s"}
+          </p>
+        </div>
+      </section>
 
-          {/* Guest details */}
-          <section className="space-y-6">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="w-1 h-6 bg-primary rounded-full"></span>
-              <h3 className="font-headline text-xl font-bold">Guest Details</h3>
-            </div>
-            <div className="space-y-4">
-              <div className="group">
-                <label className="block text-xs font-semibold text-on-surface-variant uppercase tracking-wider mb-2 ml-1">
-                  Full Name
-                </label>
-                <input
-                  className="w-full px-5 py-4 bg-surface-container-high border-none rounded-2xl text-on-surface placeholder:text-outline/50 focus:ring-2 focus:ring-primary/20 focus:bg-surface-container-lowest transition-all"
-                  placeholder="e.g. Julianne Moore"
-                  type="text"
-                />
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="group">
-                  <label className="block text-xs font-semibold text-on-surface-variant uppercase tracking-wider mb-2 ml-1">
-                    Email Address
-                  </label>
-                  <input
-                    className="w-full px-5 py-4 bg-surface-container-high border-none rounded-2xl text-on-surface placeholder:text-outline/50 focus:ring-2 focus:ring-primary/20 focus:bg-surface-container-lowest transition-all"
-                    placeholder="you@example.com"
-                    type="email"
-                  />
-                </div>
-                <div className="group">
-                  <label className="block text-xs font-semibold text-on-surface-variant uppercase tracking-wider mb-2 ml-1">
-                    Mobile Number
-                  </label>
-                  <input
-                    className="w-full px-5 py-4 bg-surface-container-high border-none rounded-2xl text-on-surface placeholder:text-outline/50 focus:ring-2 focus:ring-primary/20 focus:bg-surface-container-lowest transition-all"
-                    placeholder="+91 90000 00000"
-                    type="tel"
-                  />
-                </div>
-              </div>
-            </div>
-          </section>
+      <form onSubmit={handleSubmit} noValidate className="space-y-6">
+        <section className="space-y-4">
+          <header className="flex items-center gap-2">
+            <span className="w-1 h-6 bg-primary rounded-full" />
+            <h2 className="font-headline text-xl font-bold">Guest details</h2>
+          </header>
 
-          {/* Stay information */}
-          <section className="space-y-6">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="w-1 h-6 bg-primary rounded-full"></span>
-              <h3 className="font-headline text-xl font-bold">
-                Stay Information
-              </h3>
-            </div>
-            <div className="bg-surface-container-low p-6 rounded-lg space-y-6">
-              <div className="flex justify-between items-center">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-secondary-container flex items-center justify-center text-on-secondary-container">
-                    <span className="material-symbols-outlined">groups</span>
-                  </div>
-                  <div>
-                    <p className="text-xs font-bold text-on-surface-variant uppercase tracking-wider">
-                      Total Guests
-                    </p>
-                    <p className="text-on-surface font-semibold">
-                      {guests} {guests === 1 ? "guest" : "guests"}
-                    </p>
-                  </div>
-                </div>
-                <Link
-                  href={`/stays/${id}`}
-                  className="text-primary text-sm font-bold hover:underline"
-                >
-                  Edit
-                </Link>
-              </div>
-              <div className="space-y-2">
-                <label className="block text-xs font-semibold text-on-surface-variant uppercase tracking-wider ml-1">
-                  Special Requests
-                </label>
-                <textarea
-                  className="w-full px-5 py-4 bg-surface-container-high border-none rounded-2xl text-on-surface placeholder:text-outline/50 focus:ring-2 focus:ring-primary/20 focus:bg-surface-container-lowest transition-all resize-none"
-                  placeholder="Late check-in requested, high floor preferred..."
-                  rows={3}
-                />
-              </div>
-            </div>
-          </section>
-
-          {/* Price summary */}
-          <section className="pt-4">
-            <div className="bg-surface-container-lowest p-6 rounded-lg space-y-4 border border-outline-variant/10">
-              <h3 className="font-headline text-lg font-bold mb-4">
-                Price Summary
-              </h3>
-              <div className="flex justify-between text-on-surface-variant">
-                <span className="text-sm">
-                  {pricing?.nights ?? 1} nights ×{" "}
-                  {currency.format(listing.basePrice)}
-                </span>
-                <span className="text-sm font-medium">
-                  {currency.format(pricing?.subtotal ?? listing.basePrice)}
-                </span>
-              </div>
-              <div className="flex justify-between text-on-surface-variant">
-                <span className="text-sm">Cleaning fee</span>
-                <span className="text-sm font-medium">
-                  {currency.format(
-                    pricing?.cleaningFee ?? listing.cleaningFee ?? 0
-                  )}
-                </span>
-              </div>
-              <div className="flex justify-between text-on-surface-variant">
-                <span className="text-sm">Service fee</span>
-                <span className="text-sm font-medium">
-                  {currency.format(pricing?.guestServiceFee ?? 0)}
-                </span>
-              </div>
-              <div className="pt-4 mt-2 border-t border-outline-variant/20 flex justify-between items-baseline">
-                <span className="font-bold text-on-surface">Total Amount</span>
-                <span className="text-2xl font-headline font-extrabold text-primary">
-                  {currency.format(pricing?.totalAmount ?? listing.basePrice)}
-                </span>
-              </div>
-            </div>
-          </section>
-
-          {/* Action */}
-          <div className="pt-4">
-            <button
-              disabled
-              className="w-full py-5 bg-gradient-to-r from-primary to-primary-container text-on-primary font-headline font-bold text-lg rounded-full shadow-lg hover:scale-[1.02] active:scale-95 transition-all duration-300 disabled:opacity-70 disabled:cursor-not-allowed"
-            >
-              Proceed to Payment
-            </button>
-            <p className="text-center text-xs text-on-surface-variant mt-4 px-8 leading-relaxed">
-              By tapping Proceed, you agree to UNesta&apos;s{" "}
-              <a className="underline text-primary" href="#">
-                Terms of Service
-              </a>{" "}
-              and{" "}
-              <a className="underline text-primary" href="#">
-                Cancellation Policy
-              </a>
-              . Payment gateway integration is pending.
-            </p>
+          <Field
+            label="Full name"
+            id="name"
+            error={errors.fullName}
+            value={fullName}
+            onChange={(v) => {
+              setFullName(v);
+              if (errors.fullName) setErrors((p) => ({ ...p, fullName: "" }));
+            }}
+            autoComplete="name"
+            maxLength={120}
+            required
+          />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Field
+              label="Email"
+              id="email"
+              type="email"
+              error={errors.email}
+              value={email}
+              onChange={(v) => {
+                setEmail(v);
+                if (errors.email) setErrors((p) => ({ ...p, email: "" }));
+              }}
+              autoComplete="email"
+              required
+            />
+            <Field
+              label="Mobile number"
+              id="phone"
+              type="tel"
+              error={errors.phone}
+              value={phone}
+              onChange={(v) => {
+                setPhone(v);
+                if (errors.phone) setErrors((p) => ({ ...p, phone: "" }));
+              }}
+              autoComplete="tel"
+              required
+            />
           </div>
-        </>
-      )}
+        </section>
+
+        <section className="space-y-3">
+          <header className="flex items-center gap-2">
+            <span className="w-1 h-6 bg-primary rounded-full" />
+            <h2 className="font-headline text-xl font-bold">Anything else?</h2>
+          </header>
+          <label className="block">
+            <span className="text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1 ml-1 block">
+              Special requests (optional)
+            </span>
+            <textarea
+              value={specialRequests}
+              onChange={(e) => {
+                setSpecialRequests(e.target.value);
+                if (errors.specialRequests)
+                  setErrors((p) => ({ ...p, specialRequests: "" }));
+              }}
+              maxLength={500}
+              placeholder="Late check-in requested, high floor preferred…"
+              rows={4}
+              className={`w-full px-5 py-4 bg-surface-container-high rounded-2xl text-on-surface placeholder:text-outline/50 focus:ring-2 focus:ring-primary/30 outline-none transition resize-none ${
+                errors.specialRequests ? "ring-2 ring-error/40" : ""
+              }`}
+            />
+            <div className="flex justify-between mt-1 ml-1 text-xs text-on-surface-variant">
+              <span>{errors.specialRequests}</span>
+              <span>{specialRequests.length}/500</span>
+            </div>
+          </label>
+        </section>
+
+        <section className="bg-surface-container-lowest p-5 rounded-2xl border border-outline-variant/20 space-y-3">
+          <h2 className="font-headline text-lg font-bold">Price summary</h2>
+          <Row
+            label={
+              pricing
+                ? `${currency.format(listing.basePrice)} × ${pricing.nights} nights`
+                : "Subtotal"
+            }
+            value={pricing ? currency.format(pricing.subtotal) : "—"}
+          />
+          <Row
+            label="Cleaning fee"
+            value={currency.format(pricing?.cleaningFee ?? listing.cleaningFee ?? 0)}
+          />
+          <Row
+            label="Service fee"
+            value={currency.format(pricing?.guestServiceFee ?? 0)}
+          />
+          <div className="pt-3 border-t border-outline-variant/20 flex justify-between items-baseline">
+            <span className="font-bold">Total</span>
+            <span className="text-2xl font-headline font-extrabold text-primary">
+              {currency.format(pricing?.totalAmount ?? listing.basePrice)}
+            </span>
+          </div>
+        </section>
+
+        <div>
+          <button
+            type="submit"
+            disabled={submitting}
+            className="w-full py-4 bg-primary text-on-primary font-bold text-base rounded-full shadow-glow-primary press hover:brightness-105 disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {submitting ? "Submitting…" : "Confirm booking"}
+          </button>
+          <p className="text-center text-xs text-on-surface-variant mt-3 leading-relaxed">
+            Payment gateway integration is pending — your booking will be created
+            with PENDING status and you can pay when contacted by your host.
+            <br />
+            By confirming, you agree to UNesta&apos;s{" "}
+            <a className="underline text-primary" href="#">
+              Terms of Service
+            </a>{" "}
+            and{" "}
+            <a className="underline text-primary" href="#">
+              Cancellation Policy
+            </a>
+            .
+          </p>
+        </div>
+      </form>
+    </main>
+  );
+}
+
+function Field({
+  label,
+  id,
+  type = "text",
+  value,
+  onChange,
+  error,
+  required,
+  autoComplete,
+  maxLength,
+}: {
+  label: string;
+  id: string;
+  type?: string;
+  value: string;
+  onChange: (v: string) => void;
+  error?: string;
+  required?: boolean;
+  autoComplete?: string;
+  maxLength?: number;
+}) {
+  return (
+    <label className="block">
+      <span className="text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1 ml-1 block">
+        {label}
+        {required && <span className="text-error ml-0.5">*</span>}
+      </span>
+      <input
+        id={id}
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        autoComplete={autoComplete}
+        maxLength={maxLength}
+        aria-invalid={!!error}
+        className={`w-full px-5 py-3.5 bg-surface-container-high rounded-2xl text-on-surface placeholder:text-outline/50 focus:ring-2 focus:ring-primary/30 outline-none transition ${
+          error ? "ring-2 ring-error/40" : ""
+        }`}
+      />
+      {error && <p className="text-xs text-error font-medium mt-1 ml-1">{error}</p>}
+    </label>
+  );
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between text-sm text-on-surface-variant">
+      <span>{label}</span>
+      <span className="font-semibold text-on-surface">{value}</span>
+    </div>
+  );
+}
+
+function PaySkeleton() {
+  return (
+    <main className="max-w-2xl mx-auto px-6 py-8 space-y-6">
+      <Skeleton className="h-6 w-24" />
+      <Skeleton className="h-28 rounded-2xl" />
+      <Skeleton className="h-40 rounded-2xl" />
+      <Skeleton className="h-40 rounded-2xl" />
+      <Skeleton className="h-14 rounded-full" />
     </main>
   );
 }

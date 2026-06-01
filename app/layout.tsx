@@ -1,19 +1,23 @@
 import type { Metadata } from "next";
-import { Plus_Jakarta_Sans, Inter } from "next/font/google";
+import { Poppins, Roboto } from "next/font/google";
 import "./globals.css";
 import AppShell from "@/components/layout/AppShell";
+import { AuthProvider } from "@/lib/auth-context";
+import { ToastProvider } from "@/lib/toast";
 
-const plusJakartaSans = Plus_Jakarta_Sans({
+// Clean, readable workhorse for all body & UI text
+const roboto = Roboto({
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
-  variable: "--font-plus-jakarta-sans",
+  weight: ["400", "500", "700"],
+  variable: "--font-roboto",
   display: "swap",
 });
 
-const inter = Inter({
+// Geometric display face for headlines
+const poppins = Poppins({
   subsets: ["latin"],
-  weight: ["300", "400", "500", "600"],
-  variable: "--font-inter",
+  weight: ["400", "500", "600", "700", "800"],
+  variable: "--font-poppins",
   display: "swap",
 });
 
@@ -29,7 +33,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${plusJakartaSans.variable} ${inter.variable} light`}
+      className={`${roboto.variable} ${poppins.variable} light`}
     >
       <head>
         {/* Material Symbols icon font */}
@@ -39,7 +43,11 @@ export default function RootLayout({
         />
       </head>
       <body className="bg-surface font-body text-on-surface antialiased">
-        <AppShell>{children}</AppShell>
+        <AuthProvider>
+          <ToastProvider>
+            <AppShell>{children}</AppShell>
+          </ToastProvider>
+        </AuthProvider>
       </body>
     </html>
   );

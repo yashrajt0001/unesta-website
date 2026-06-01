@@ -30,69 +30,225 @@
   --color-on-tertiary-fixed: #1d1b16;
   --color-on-tertiary-fixed-variant: #494640;
 
+  /* Accent — warm gold, used sparingly for highlights & ratings */
+  --color-accent: #c8932f;
+  --color-on-accent: #ffffff;
+  --color-accent-container: #f7e6c4;
+  --color-on-accent-container: #4a3408;
+
   --color-error: #ba1a1a;
   --color-on-error: #ffffff;
   --color-error-container: #ffdad6;
   --color-on-error-container: #93000a;
 
-  --color-surface: #faf9f8;
+  --color-surface: #faf8f5;
   --color-on-surface: #1a1c1c;
-  --color-surface-variant: #e3e2e1;
+  --color-surface-variant: #e6e1da;
   --color-on-surface-variant: #51443e;
-  --color-surface-dim: #dadad9;
-  --color-surface-bright: #faf9f8;
+  --color-surface-dim: #ddd8d1;
+  --color-surface-bright: #fefcf9;
   --color-surface-tint: #81533a;
   --color-surface-container-lowest: #ffffff;
-  --color-surface-container-low: #f4f3f2;
-  --color-surface-container: #eeeeed;
-  --color-surface-container-high: #e9e8e7;
-  --color-surface-container-highest: #e3e2e1;
+  --color-surface-container-low: #f5f2ec;
+  --color-surface-container: #efebe4;
+  --color-surface-container-high: #eae5dd;
+  --color-surface-container-highest: #e4dfd6;
 
   --color-outline: #84746d;
   --color-outline-variant: #d6c3ba;
 
-  --color-background: #faf9f8;
+  --color-background: #faf8f5;
   --color-on-background: #1a1c1c;
 
   --color-inverse-surface: #2f3130;
   --color-inverse-on-surface: #f1f0ef;
 
-  /* Border radius */
+  /* Border radius (unchanged from original to keep existing rounded-* sizes) */
   --radius: 1rem;
   --radius-lg: 2rem;
   --radius-xl: 3rem;
   --radius-full: 9999px;
 
   /* Fonts — next/font variables set on <html> */
-  --font-headline: var(--font-plus-jakarta-sans), "Plus Jakarta Sans", sans-serif;
-  --font-body: var(--font-inter), Inter, sans-serif;
-  --font-label: var(--font-inter), Inter, sans-serif;
+  --font-headline: var(--font-poppins), "Poppins", system-ui, sans-serif;
+  --font-body: var(--font-roboto), "Roboto", system-ui, sans-serif;
+  --font-label: var(--font-roboto), "Roboto", system-ui, sans-serif;
+  /* Override Tailwind's default sans so any unclassed text uses Roboto too */
+  --font-sans: var(--font-roboto), "Roboto", system-ui, sans-serif;
+  --default-font-family: var(--font-roboto), "Roboto", system-ui, sans-serif;
+
+  /* Motion — easing curves used across micro-interactions */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out-soft: cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+/* ── Base ─────────────────────────────────────────────────────────── */
+
+html {
+  -webkit-tap-highlight-color: transparent;
+  font-family: var(--font-body);
+}
+
+/* Form controls reset their font in browsers — force inherit so Roboto applies */
+button,
+input,
+select,
+textarea,
+optgroup {
+  font-family: inherit;
+}
+
+body {
+  min-height: 100dvh;
+  font-family: var(--font-body);
+  /* Warm, atmospheric backdrop instead of a flat fill */
+  background-color: var(--color-surface);
+  background-image:
+    radial-gradient(1200px 600px at 100% -10%, rgba(197, 142, 113, 0.10), transparent 60%),
+    radial-gradient(900px 500px at -10% 0%, rgba(81, 99, 81, 0.07), transparent 55%);
+  background-attachment: fixed;
+}
+
+/* Bold geometric display face — tighten tracking for a professional look */
+.font-headline {
+  font-optical-sizing: auto;
+  letter-spacing: -0.02em;
 }
 
 /* Material Symbols icon style */
 .material-symbols-outlined {
   font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+  user-select: none;
 }
 
-/* Scrollbar hide */
+/* Accessible focus ring for keyboard users only */
+:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--color-surface), 0 0 0 5px rgba(129, 83, 58, 0.55);
+  border-radius: 0.5rem;
+}
+
+/* Honour reduced-motion preferences globally */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ── Scrollbar hide ───────────────────────────────────────────────── */
 .hide-scrollbar::-webkit-scrollbar,
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .hide-scrollbar,
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-body {
-  min-height: max(884px, 100dvh);
+/* ── Elevation system — soft, layered, warm-tinted shadows ────────── */
+.shadow-soft {
+  box-shadow:
+    0 1px 2px rgba(50, 18, 1, 0.04),
+    0 4px 12px rgba(50, 18, 1, 0.05);
+}
+.shadow-lift {
+  box-shadow:
+    0 2px 6px rgba(50, 18, 1, 0.05),
+    0 12px 28px -8px rgba(50, 18, 1, 0.14);
+}
+.shadow-float {
+  box-shadow:
+    0 4px 10px rgba(50, 18, 1, 0.06),
+    0 24px 50px -12px rgba(50, 18, 1, 0.22);
+}
+.shadow-glow-primary {
+  box-shadow: 0 12px 30px -10px rgba(129, 83, 58, 0.55);
 }
 
-/* Active nav pill */
+/* ── Glassmorphism surface ────────────────────────────────────────── */
+.glass {
+  background-color: rgba(250, 248, 245, 0.72);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+}
+.glass-dark {
+  background-color: rgba(26, 28, 28, 0.42);
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+}
+
+/* ── Tactile press feedback ───────────────────────────────────────── */
+.press {
+  transition: transform 0.18s var(--ease-spring), box-shadow 0.18s var(--ease-out-soft);
+}
+.press:active {
+  transform: scale(0.96);
+}
+.hover-lift {
+  transition: transform 0.4s var(--ease-out-soft), box-shadow 0.4s var(--ease-out-soft);
+  will-change: transform;
+}
+.hover-lift:hover {
+  transform: translateY(-4px);
+}
+
+/* ── Gradient text & accents ──────────────────────────────────────── */
+.text-gradient-primary {
+  background: linear-gradient(120deg, #81533a 0%, #c58e71 55%, #c8932f 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ── Skeleton shimmer ─────────────────────────────────────────────── */
+@keyframes shimmer {
+  100% { transform: translateX(100%); }
+}
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--color-surface-container-high);
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.55),
+    transparent
+  );
+  animation: shimmer 1.6s var(--ease-in-out-soft) infinite;
+}
+
+/* ── Reveal on scroll (toggled by Reveal component) ───────────────── */
+.reveal {
+  opacity: 0;
+  transform: translateY(22px);
+  transition:
+    opacity 0.7s var(--ease-out-soft),
+    transform 0.7s var(--ease-out-soft);
+  transition-delay: var(--reveal-delay, 0ms);
+  will-change: opacity, transform;
+}
+.reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+/* ── Active nav pill ──────────────────────────────────────────────── */
 .active-nav-pill {
-  background: linear-gradient(to right, #81533a, #c58e71);
+  background: linear-gradient(135deg, #81533a, #c58e71);
   color: white !important;
   border-radius: 9999px;
-  box-shadow: 0 4px 12px rgba(129, 83, 58, 0.2);
+  box-shadow: 0 8px 20px -6px rgba(129, 83, 58, 0.6);
 }
 
-/* Slow zoom hero animation */
+/* ── Slow zoom hero animation ─────────────────────────────────────── */
 @keyframes slow-zoom {
   0%   { transform: scale(1.1); }
   50%  { transform: scale(1.2); }
@@ -102,12 +258,59 @@ body {
   animation: slow-zoom 20s ease-in-out infinite;
 }
 
-/* Rounded destination cards */
-.destination-card {
-  border-radius: 2rem;
+/* ── Entrance animations ──────────────────────────────────────────── */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.94); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes sheet-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+@keyframes overlay-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes heart-pop {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(1.35); }
+  60%  { transform: scale(0.9); }
+  100% { transform: scale(1); }
+}
+.animate-fade-up { animation: fade-up 0.6s var(--ease-out-soft) both; }
+.animate-scale-in { animation: scale-in 0.35s var(--ease-spring) both; }
+.animate-sheet-up { animation: sheet-up 0.4s var(--ease-out-soft) both; }
+.animate-overlay-in { animation: overlay-in 0.3s ease both; }
+.animate-heart-pop { animation: heart-pop 0.45s var(--ease-spring); }
+
+/* Toast auto-dismiss progress bar (matches DURATION_MS in toast.tsx) */
+@keyframes toast-progress {
+  from { width: 100%; }
+  to   { width: 0%; }
+}
+.toast-progress {
+  width: 100%;
+  animation: toast-progress 4s linear forwards;
 }
 
-/* Icon size helpers (Material Symbols rendered via font-size) */
+/* ── Carousel dots ────────────────────────────────────────────────── */
+.carousel-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.6);
+  transition: width 0.3s var(--ease-spring), background 0.3s ease;
+}
+.carousel-dot.is-active {
+  width: 20px;
+  background: #ffffff;
+}
+
+/* ── Icon size helpers (Material Symbols rendered via font-size) ──── */
 .icon-sm  { font-size: 1.25rem; }
 .icon-md  { font-size: 1.5rem; }
 .icon-lg  { font-size: 2rem; }

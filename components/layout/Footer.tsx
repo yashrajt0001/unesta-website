@@ -17,35 +17,40 @@ export default function Footer() {
       </div>
 
       {/* Links */}
-      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-8">
-        <div className="space-y-3 sm:space-y-4">
-          <h3 className="font-headline font-bold text-on-surface tracking-tight text-sm sm:text-base">
-            Support
-          </h3>
-          <ul className="space-y-2 sm:space-y-3 text-xs sm:text-sm text-on-surface-variant font-medium">
-            {["Help Center", "AirCover", "Safety Information", "Cancellation Options"].map((item) => (
-              <li key={item}>
-                <Link href="#" className="hover:text-primary transition-colors">
-                  {item}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </div>
-        <div className="space-y-3 sm:space-y-4">
-          <h3 className="font-headline font-bold text-on-surface tracking-tight text-sm sm:text-base">
-            Hosting
-          </h3>
-          <ul className="space-y-2 sm:space-y-3 text-xs sm:text-sm text-on-surface-variant font-medium">
-            {["Host your space", "Host an Experience", "Community Center"].map((item) => (
-              <li key={item}>
-                <Link href="#" className="hover:text-primary transition-colors">
-                  {item}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8">
+        {[
+          {
+            heading: "Discover",
+            links: ["Stays in Udaipur", "Experiences", "Day trips", "Travel stories"],
+          },
+          {
+            heading: "Support",
+            links: ["Help Center", "Safety information", "Cancellation options", "Contact us"],
+          },
+          {
+            heading: "Hosting",
+            links: ["Host your space", "Host an experience", "Community center"],
+          },
+          {
+            heading: "Company",
+            links: ["About UNesta", "Careers", "Privacy", "Terms"],
+          },
+        ].map((col) => (
+          <div key={col.heading} className="space-y-3 sm:space-y-4">
+            <h3 className="font-headline font-bold text-on-surface tracking-tight text-sm sm:text-base">
+              {col.heading}
+            </h3>
+            <ul className="space-y-2 sm:space-y-3 text-xs sm:text-sm text-on-surface-variant font-medium">
+              {col.links.map((item) => (
+                <li key={item}>
+                  <Link href="#" className="hover:text-primary transition-colors">
+                    {item}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
       </div>
 
       <div className="h-px bg-outline-variant/30" />

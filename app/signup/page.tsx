@@ -1,148 +1,452 @@
 "use client";
 
+import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useAuth } from "@/lib/auth-context";
+import { useToast } from "@/lib/toast";
+import { ApiError, authApi } from "@/lib/api";
+
+const RESEND_SECONDS = 30;
+
+function isValidPhone(raw: string) {
+  return /^\+?\d{10,15}$/.test(raw.trim());
+}
+
+function isValidEmail(raw: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw.trim());
+}
 
 export default function SignupPage() {
   return (
-    <div className="bg-surface font-body text-on-surface antialiased min-h-screen flex flex-col items-center justify-center p-4">
-      {/* Brand Header */}
-      <header className="mb-8 text-center">
-        <Link href="/" className="font-headline text-3xl font-bold tracking-tighter text-on-surface">
-          UNesta
-        </Link>
-      </header>
+    <Suspense fallback={<div className="min-h-screen bg-surface" />}>
+      <SignupInner />
+    </Suspense>
+  );
+}
 
-      {/* Sign Up Card */}
-      <main className="w-full max-w-md bg-surface-container-lowest rounded-2xl shadow-[0_20px_40px_rgba(26,28,28,0.03)] p-8 flex flex-col gap-6 mb-24">
-        {/* Heading Section */}
-        <div className="text-center space-y-2">
-          <h2 className="font-headline text-2xl font-bold text-on-surface">Join UNesta</h2>
-          <p className="text-on-surface-variant font-body leading-relaxed text-sm">
-            Join our curated collection of heritage stays in Udaipur.
-          </p>
-        </div>
+function SignupInner() {
+  const router = useRouter();
+  const search = useSearchParams();
+  const next = search?.get("next") || "/";
 
-        {/* Form Section */}
-        <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
-          {/* Email */}
-          <div className="space-y-1">
-            <label className="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant ml-1">
-              Email Address
-            </label>
-            <input
-              className="w-full bg-surface-container-high border-none rounded-2xl py-4 px-5 text-on-surface placeholder:text-outline focus:ring-2 focus:ring-primary/20 focus:bg-surface-container-lowest transition-all duration-300 outline-none"
-              placeholder="Enter your email"
-              type="email"
-            />
-          </div>
+  const { sendOtp, verifyOtp, isAuthenticated, isLoading, refreshUser } =
+    useAuth();
+  const toast = useToast();
 
-          {/* Mobile Number */}
-          <div className="space-y-1">
-            <label className="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant ml-1">
-              Mobile Number
-            </label>
-            <div className="flex gap-2">
-              <div className="bg-surface-container-high rounded-2xl py-4 px-4 text-on-surface font-medium flex items-center gap-1">
-                <span>+91</span>
-              </div>
-              <input
-                className="w-full bg-surface-container-high border-none rounded-2xl py-4 px-5 text-on-surface placeholder:text-outline focus:ring-2 focus:ring-primary/20 focus:bg-surface-container-lowest transition-all duration-300 outline-none"
-                placeholder="Phone number"
-                type="tel"
-              />
-            </div>
-          </div>
+  const [step, setStep] = useState<"phone" | "otp" | "details">("phone");
+  const [countryCode, setCountryCode] = useState("+91");
+  const [phone, setPhone] = useState("");
+  const [digits, setDigits] = useState<string[]>(Array(6).fill(""));
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
 
-          {/* OTP Verification */}
-          <div className="space-y-1">
-            <div className="flex justify-between items-end mb-1">
-              <label className="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant ml-1">
-                OTP Verification
-              </label>
-              <button className="text-[11px] font-bold text-primary hover:underline" type="button">
-                Resend OTP
-              </button>
-            </div>
-            <div className="grid grid-cols-6 gap-2">
-              {[1, 2, 3, 4, 5, 6].map((i) => (
-                <input
-                  key={i}
-                  className="w-full aspect-square text-center bg-surface-container-high border-none rounded-xl text-lg font-bold text-on-surface focus:ring-2 focus:ring-primary/20 focus:bg-surface-container-lowest transition-all duration-300 outline-none"
-                  maxLength={1}
-                  type="text"
-                />
-              ))}
-            </div>
-          </div>
+  const [errors, setErrors] = useState<{
+    phone?: string;
+    otp?: string;
+    firstName?: string;
+    email?: string;
+  }>({});
+  const [submitting, setSubmitting] = useState(false);
+  const [resendIn, setResendIn] = useState(0);
 
-          {/* Password */}
-          <div className="space-y-1 relative">
-            <label className="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant ml-1">
-              Create Password
-            </label>
-            <div className="relative">
-              <input
-                className="w-full bg-surface-container-high border-none rounded-2xl py-4 px-5 text-on-surface placeholder:text-outline focus:ring-2 focus:ring-primary/20 focus:bg-surface-container-lowest transition-all duration-300 outline-none pr-12"
-                placeholder="Min. 8 characters"
-                type="password"
-              />
-              <button className="absolute right-4 top-1/2 -translate-y-1/2 text-on-surface-variant" type="button">
-                <span className="material-symbols-outlined text-xl">visibility</span>
-              </button>
-            </div>
-          </div>
+  const otpRefs = useRef<Array<HTMLInputElement | null>>([]);
 
-          {/* Primary Action */}
-          <button
-            className="w-full bg-primary text-on-primary py-4 rounded-full font-bold tracking-tight hover:opacity-90 active:scale-95 transition-all duration-300 mt-4 shadow-lg shadow-primary/20"
-            type="submit"
+  const fullPhone = `${countryCode}${phone.replace(/\D/g, "")}`;
+  const otpValue = digits.join("");
+
+  useEffect(() => {
+    if (!isLoading && isAuthenticated && step === "phone") {
+      router.replace(next);
+    }
+  }, [isLoading, isAuthenticated, step, router, next]);
+
+  useEffect(() => {
+    if (resendIn <= 0) return;
+    const t = window.setTimeout(() => setResendIn((n) => n - 1), 1000);
+    return () => window.clearTimeout(t);
+  }, [resendIn]);
+
+  useEffect(() => {
+    if (step === "otp") otpRefs.current[0]?.focus();
+  }, [step]);
+
+  async function handleSendOtp(e?: React.FormEvent) {
+    e?.preventDefault();
+    setErrors({});
+    if (!isValidPhone(fullPhone)) {
+      setErrors({ phone: "Enter a valid phone number with country code." });
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await sendOtp(fullPhone);
+      toast.success(`OTP sent to ${fullPhone}`);
+      setStep("otp");
+      setDigits(Array(6).fill(""));
+      setResendIn(RESEND_SECONDS);
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : "Could not send OTP.";
+      setErrors({ phone: msg });
+      toast.error(msg);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleVerifyOtp(e?: React.FormEvent) {
+    e?.preventDefault();
+    setErrors({});
+    if (!/^\d{6}$/.test(otpValue)) {
+      setErrors({ otp: "Enter the 6-digit OTP." });
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const { isNewUser } = await verifyOtp(fullPhone, otpValue);
+      if (isNewUser) {
+        toast.success("Account created. Just a few more details.");
+        setStep("details");
+      } else {
+        toast.success("Signed in.");
+        router.replace(next);
+      }
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : "Could not verify OTP.";
+      setErrors({ otp: msg });
+      toast.error(msg);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleSaveDetails(e?: React.FormEvent) {
+    e?.preventDefault();
+    const nextErrors: typeof errors = {};
+    if (!firstName.trim()) nextErrors.firstName = "First name is required.";
+    if (email && !isValidEmail(email)) nextErrors.email = "Enter a valid email.";
+    if (Object.keys(nextErrors).length) {
+      setErrors(nextErrors);
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await authApi.updateProfile({
+        firstName: firstName.trim(),
+        lastName: lastName.trim() || undefined,
+        email: email.trim() || undefined,
+      });
+      await refreshUser();
+      toast.success("Welcome to UNesta!");
+      router.replace(next);
+    } catch (err) {
+      const msg =
+        err instanceof ApiError ? err.message : "Could not save your details.";
+      toast.error(msg);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function handleDigitChange(idx: number, raw: string) {
+    const c = raw.replace(/\D/g, "");
+    if (!c) {
+      setDigits((d) => d.map((v, i) => (i === idx ? "" : v)));
+      return;
+    }
+    if (c.length > 1) {
+      // Paste
+      const arr = c.slice(0, 6 - idx).split("");
+      setDigits((d) => {
+        const out = [...d];
+        arr.forEach((ch, k) => {
+          if (idx + k < 6) out[idx + k] = ch;
+        });
+        return out;
+      });
+      const focusIdx = Math.min(idx + arr.length, 5);
+      otpRefs.current[focusIdx]?.focus();
+      return;
+    }
+    setDigits((d) => d.map((v, i) => (i === idx ? c : v)));
+    if (idx < 5) otpRefs.current[idx + 1]?.focus();
+  }
+
+  function handleDigitKey(idx: number, e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Backspace" && !digits[idx] && idx > 0) {
+      otpRefs.current[idx - 1]?.focus();
+    } else if (e.key === "ArrowLeft" && idx > 0) {
+      otpRefs.current[idx - 1]?.focus();
+    } else if (e.key === "ArrowRight" && idx < 5) {
+      otpRefs.current[idx + 1]?.focus();
+    }
+  }
+
+  return (
+    <div className="bg-surface text-on-surface min-h-screen flex flex-col">
+      <nav className="sticky top-0 z-40 bg-surface/80 backdrop-blur-xl border-b border-outline-variant/20">
+        <div className="flex justify-between items-center w-full px-6 py-4 max-w-7xl mx-auto">
+          <Link
+            href="/"
+            aria-label="Back to home"
+            className="text-on-surface-variant hover:text-primary transition-colors"
           >
-            Create Account
-          </button>
-        </form>
-
-        {/* Divider */}
-        <div className="flex items-center gap-4 py-2">
-          <div className="h-[1px] flex-1 bg-outline-variant/30"></div>
-          <span className="text-[10px] font-bold uppercase tracking-widest text-outline">or continue with</span>
-          <div className="h-[1px] flex-1 bg-outline-variant/30"></div>
+            <span className="material-symbols-outlined">close</span>
+          </Link>
+          <span className="font-headline font-bold text-xl tracking-tighter">
+            UNesta
+          </span>
+          <div className="w-6" />
         </div>
+      </nav>
 
-        {/* Social Auth */}
-        <div className="grid grid-cols-2 gap-4">
-          <button className="flex items-center justify-center gap-3 bg-surface-container-high py-3 rounded-full hover:bg-surface-container transition-colors duration-300 active:scale-95">
-            <span className="material-symbols-outlined text-on-surface-variant group-hover:text-primary transition-colors">
-              mail
-            </span>
-            <span className="text-sm font-semibold text-on-surface">Google</span>
-          </button>
-          <button className="flex items-center justify-center gap-3 bg-surface-container-high py-3 rounded-full hover:bg-surface-container transition-colors duration-300 active:scale-95">
-            <span className="material-symbols-outlined text-on-surface-variant group-hover:text-primary transition-colors">
-              phone_iphone
-            </span>
-            <span className="text-sm font-semibold text-on-surface">Apple</span>
-          </button>
-        </div>
+      <main className="flex-grow flex items-center justify-center pt-10 pb-16 px-4">
+        <div className="w-full max-w-md bg-surface-container-lowest rounded-[2rem] shadow-float p-8 space-y-6 animate-scale-in">
+          <header className="text-center space-y-2">
+            <h1 className="font-headline text-2xl font-semibold">Join UNesta</h1>
+            <p className="text-on-surface-variant text-sm leading-relaxed">
+              {step === "phone" &&
+                "Create an account with your phone number — no password needed."}
+              {step === "otp" && `Enter the 6-digit code sent to ${fullPhone}.`}
+              {step === "details" && "Tell us a little about yourself."}
+            </p>
+          </header>
 
-        {/* Footer Link */}
-        <div className="text-center pt-2">
-          <p className="text-sm text-on-surface-variant">
-            Already have an account?
-            <Link href="/login" className="text-primary font-bold hover:underline ml-1">
-              Log in
-            </Link>
-          </p>
+          {step === "phone" && (
+            <form className="space-y-4" onSubmit={handleSendOtp} noValidate>
+              <div className="space-y-1">
+                <label
+                  htmlFor="signup-phone"
+                  className="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant ml-1"
+                >
+                  Mobile number
+                </label>
+                <div className="flex gap-2">
+                  <select
+                    aria-label="Country code"
+                    value={countryCode}
+                    onChange={(e) => setCountryCode(e.target.value)}
+                    className="bg-surface-container-high rounded-2xl py-4 px-3 font-medium outline-none focus:ring-2 focus:ring-primary/30"
+                  >
+                    <option value="+91">+91</option>
+                    <option value="+1">+1</option>
+                    <option value="+44">+44</option>
+                    <option value="+61">+61</option>
+                    <option value="+971">+971</option>
+                  </select>
+                  <input
+                    id="signup-phone"
+                    type="tel"
+                    inputMode="numeric"
+                    autoComplete="tel"
+                    autoFocus
+                    placeholder="Phone number"
+                    value={phone}
+                    onChange={(e) => {
+                      setPhone(e.target.value.replace(/\D/g, "").slice(0, 15));
+                      if (errors.phone) setErrors({});
+                    }}
+                    aria-invalid={!!errors.phone}
+                    className={`flex-1 bg-surface-container-high rounded-2xl py-4 px-5 outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-outline/60 ${
+                      errors.phone ? "ring-2 ring-error/40" : ""
+                    }`}
+                  />
+                </div>
+                {errors.phone && (
+                  <p className="text-xs text-error font-medium ml-1">
+                    {errors.phone}
+                  </p>
+                )}
+              </div>
+
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full bg-primary text-on-primary py-4 rounded-full font-bold tracking-tight press hover:brightness-105 disabled:opacity-60 disabled:cursor-not-allowed mt-2 shadow-glow-primary"
+              >
+                {submitting ? "Sending OTP…" : "Send OTP"}
+              </button>
+            </form>
+          )}
+
+          {step === "otp" && (
+            <form className="space-y-4" onSubmit={handleVerifyOtp} noValidate>
+              <div className="space-y-2">
+                <div className="flex justify-between items-end mb-1">
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant ml-1">
+                    OTP verification
+                  </label>
+                  <button
+                    className="text-[11px] font-bold text-primary hover:underline disabled:text-on-surface-variant/60 disabled:no-underline"
+                    type="button"
+                    onClick={() => handleSendOtp()}
+                    disabled={resendIn > 0 || submitting}
+                  >
+                    {resendIn > 0 ? `Resend in ${resendIn}s` : "Resend OTP"}
+                  </button>
+                </div>
+                <div className="grid grid-cols-6 gap-2">
+                  {digits.map((d, i) => (
+                    <input
+                      key={i}
+                      ref={(el) => {
+                        otpRefs.current[i] = el;
+                      }}
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete={i === 0 ? "one-time-code" : "off"}
+                      maxLength={6}
+                      value={d}
+                      aria-label={`Digit ${i + 1}`}
+                      onChange={(e) => handleDigitChange(i, e.target.value)}
+                      onKeyDown={(e) => handleDigitKey(i, e)}
+                      onFocus={(e) => e.target.select()}
+                      className={`w-full aspect-square text-center bg-surface-container-high rounded-xl text-lg font-bold focus:ring-2 focus:ring-primary/30 outline-none transition ${
+                        errors.otp ? "ring-2 ring-error/40" : ""
+                      }`}
+                    />
+                  ))}
+                </div>
+                {errors.otp && (
+                  <p className="text-xs text-error font-medium ml-1">
+                    {errors.otp}
+                  </p>
+                )}
+              </div>
+
+              <button
+                type="submit"
+                disabled={submitting || otpValue.length !== 6}
+                className="w-full bg-primary text-on-primary py-4 rounded-full font-bold tracking-tight press hover:brightness-105 disabled:opacity-60 disabled:cursor-not-allowed mt-2 shadow-glow-primary"
+              >
+                {submitting ? "Verifying…" : "Verify"}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setStep("phone");
+                  setDigits(Array(6).fill(""));
+                  setErrors({});
+                }}
+                className="w-full text-on-surface-variant hover:text-on-surface text-sm font-medium"
+              >
+                ← Change number
+              </button>
+            </form>
+          )}
+
+          {step === "details" && (
+            <form className="space-y-4" onSubmit={handleSaveDetails} noValidate>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label
+                    htmlFor="first-name"
+                    className="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant ml-1"
+                  >
+                    First name
+                  </label>
+                  <input
+                    id="first-name"
+                    type="text"
+                    autoComplete="given-name"
+                    autoFocus
+                    value={firstName}
+                    onChange={(e) => {
+                      setFirstName(e.target.value);
+                      if (errors.firstName) setErrors((p) => ({ ...p, firstName: undefined }));
+                    }}
+                    maxLength={50}
+                    aria-invalid={!!errors.firstName}
+                    className={`w-full bg-surface-container-high rounded-2xl py-3.5 px-4 outline-none focus:ring-2 focus:ring-primary/30 ${
+                      errors.firstName ? "ring-2 ring-error/40" : ""
+                    }`}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label
+                    htmlFor="last-name"
+                    className="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant ml-1"
+                  >
+                    Last name
+                  </label>
+                  <input
+                    id="last-name"
+                    type="text"
+                    autoComplete="family-name"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    maxLength={50}
+                    className="w-full bg-surface-container-high rounded-2xl py-3.5 px-4 outline-none focus:ring-2 focus:ring-primary/30"
+                  />
+                </div>
+              </div>
+              {errors.firstName && (
+                <p className="text-xs text-error font-medium ml-1">
+                  {errors.firstName}
+                </p>
+              )}
+
+              <div className="space-y-1">
+                <label
+                  htmlFor="signup-email"
+                  className="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant ml-1"
+                >
+                  Email (optional)
+                </label>
+                <input
+                  id="signup-email"
+                  type="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    if (errors.email) setErrors((p) => ({ ...p, email: undefined }));
+                  }}
+                  aria-invalid={!!errors.email}
+                  className={`w-full bg-surface-container-high rounded-2xl py-3.5 px-4 outline-none focus:ring-2 focus:ring-primary/30 ${
+                    errors.email ? "ring-2 ring-error/40" : ""
+                  }`}
+                  placeholder="you@example.com"
+                />
+                {errors.email && (
+                  <p className="text-xs text-error font-medium ml-1">
+                    {errors.email}
+                  </p>
+                )}
+              </div>
+
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full bg-primary text-on-primary py-4 rounded-full font-bold tracking-tight press hover:brightness-105 disabled:opacity-60 disabled:cursor-not-allowed mt-2 shadow-glow-primary"
+              >
+                {submitting ? "Saving…" : "Finish setup"}
+              </button>
+              <button
+                type="button"
+                onClick={() => router.replace(next)}
+                className="w-full text-on-surface-variant hover:text-on-surface text-sm font-medium"
+              >
+                Skip for now
+              </button>
+            </form>
+          )}
+
+          {step !== "details" && (
+            <p className="text-center text-sm text-on-surface-variant pt-2">
+              Already have an account?
+              <Link
+                href={`/login${next ? `?next=${encodeURIComponent(next)}` : ""}`}
+                className="text-primary font-bold hover:underline ml-1"
+              >
+                Log in
+              </Link>
+            </p>
+          )}
         </div>
       </main>
-
-      {/* Aesthetic Decorative Image (Top Right) */}
-      <div className="fixed top-0 right-0 w-48 h-48 -mr-12 -mt-12 opacity-40 z-[-1] pointer-events-none">
-        <img 
-          className="w-full h-full object-cover rounded-full"
-          alt="Decorative Pattern"
-          src="https://lh3.googleusercontent.com/aida-public/AB6AXuAfVhG-A9Z4NE4O4VD3__E-K3Veue6SYqTog_sJd5ZJpUQ-qJFw-xewyI-7Hc3TY5GYs4XylBlCCRdZ6KnuC6TpccCjmkwKlKqDiJBdsvpyFDR2mn6VHQY5COUXkH9mgpW39_ReIZ6bBeAU9wtKw1RwmSC4lM3ExbOdj1KbYBLnR9Po1Rk4Fb0KNli9wumMPXq4Nz18JGjLKHzQllPF5tQoZYKAVd_jB5QhNXlMOUKOkY3X9496pECD_WnQJspLIR8ohGrR6uHgGz8" 
-        />
-      </div>
     </div>
   );
 }

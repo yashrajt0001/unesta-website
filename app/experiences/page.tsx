@@ -5,13 +5,11 @@ import Link from "next/link";
 import Footer from "@/components/layout/Footer";
 import SearchModal from "@/components/layout/SearchModal";
 import { SkeletonStayCard } from "@/components/ui/Skeleton";
+import { StayCard } from "@/components/ui/StayCard";
+import { Reveal } from "@/components/ui/Reveal";
 import { fetchPublishedListings, type ListingCard } from "@/lib/api";
 
-const currency = new Intl.NumberFormat("en-IN", {
-  style: "currency",
-  currency: "INR",
-  maximumFractionDigits: 0,
-});
+const HOST_URL = "https://unesta-host-dashboard.vercel.app";
 
 const categories = [
   { icon: "directions_boat", label: "Boating" },
@@ -75,7 +73,6 @@ const dayTrips = [
     price: "₹3,200 / Person",
     image:
       "https://lh3.googleusercontent.com/aida-public/AB6AXuBgafEwSXud9TY2A2UWboFFvyZKw-rlLBbgys1agWXFFnQJzCdqIguOn-cyTwQYo3CKZNcnEqmDXS6dJAen-478b9AfQsIab3nWVFLtZDr0MSjvn4sq7QRMGyt8npVm4yflYdbj4_CG-L3T7u5Zf1vjdIF7AckJ8bqmhPPd9X5lQr89JHnMt2PZU_uoDHk-wyVlsUWI7BgOOfHQceq5gXp-h4ZhvRkea7nX1cz9wShkUWfmLEco8UaB16vKuRc0bawQ77JE8_pKRtY",
-    muted: true,
   },
 ];
 
@@ -113,78 +110,36 @@ export default function ExperiencesPage() {
   return (
     <>
       {/* Hero & search */}
-      <section className="px-4 sm:px-6 pt-4 pb-8 space-y-6">
-        <div className="space-y-4">
-          <h2 className="text-2xl sm:text-3xl lg:text-4xl lg:text-center font-headline font-extrabold tracking-tight text-on-surface leading-tight">
-            <span className="block lg:inline">Find your next </span>
-            <span className="block lg:inline text-primary">
+      <section className="px-4 sm:px-6 pt-6 pb-8 space-y-6">
+        <div className="space-y-4 lg:text-center max-w-2xl lg:mx-auto animate-fade-up">
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-headline font-semibold tracking-tight text-on-surface leading-[1.08]">
+            Find your next{" "}
+            <em className="not-italic text-gradient-primary font-medium">
               escape in Udaipur.
-            </span>
+            </em>
           </h2>
-
-          {/* Desktop search row */}
-          <div className="hidden lg:block lg:w-[70%] lg:mx-auto">
-            <div className="bg-surface-container-high rounded-full p-1.5 shadow-sm grid grid-cols-1 lg:grid-cols-3 gap-3">
-              <label className="bg-surface-container-low rounded-full px-4 py-2 flex items-center gap-3 cursor-text">
-                <span className="material-symbols-outlined text-primary">
-                  location_on
-                </span>
-                <div className="min-w-0">
-                  <p className="text-[10px] uppercase tracking-widest font-bold text-on-surface-variant">
-                    Location
-                  </p>
-                  <input
-                    className="bg-transparent border-0 focus:ring-0 outline-none w-full text-sm text-on-surface placeholder:text-on-surface-variant"
-                    type="text"
-                    placeholder="Udaipur, Rajasthan"
-                  />
-                </div>
-              </label>
-              <label className="bg-surface-container-low rounded-full px-4 py-2 flex items-center gap-3 cursor-text">
-                <span className="material-symbols-outlined text-primary">
-                  calendar_month
-                </span>
-                <div className="min-w-0">
-                  <p className="text-[10px] uppercase tracking-widest font-bold text-on-surface-variant">
-                    Date
-                  </p>
-                  <input
-                    className="bg-transparent border-0 focus:ring-0 outline-none w-full text-sm text-on-surface placeholder:text-on-surface-variant"
-                    type="text"
-                    placeholder="Select date"
-                  />
-                </div>
-              </label>
-              <label className="bg-surface-container-low rounded-full px-4 py-2 flex items-center gap-3 cursor-text">
-                <span className="material-symbols-outlined text-primary">
-                  group
-                </span>
-                <div className="min-w-0">
-                  <p className="text-[10px] uppercase tracking-widest font-bold text-on-surface-variant">
-                    Guests
-                  </p>
-                  <input
-                    className="bg-transparent border-0 focus:ring-0 outline-none w-full text-sm text-on-surface placeholder:text-on-surface-variant"
-                    type="text"
-                    placeholder="2 Adults"
-                  />
-                </div>
-              </label>
-            </div>
-          </div>
-
-          {/* Mobile search trigger */}
-          <div className="relative group lg:hidden" onClick={() => setSearchOpen(true)}>
-            <div className="flex items-center bg-surface-container-high rounded-full px-4 sm:px-6 py-3 sm:py-4 gap-4 cursor-pointer hover:bg-surface-container-highest transition-colors shadow-sm text-sm sm:text-base">
-              <span className="material-symbols-outlined text-primary">
-                search
-              </span>
-              <span className="text-on-surface-variant font-medium truncate">
-                Discover experiences in Udaipur
-              </span>
-            </div>
-          </div>
+          <p className="text-on-surface-variant text-base leading-relaxed lg:mx-auto">
+            Lake dinners, heritage walks and rooftop sunsets — experiences
+            curated by locals who know the city by heart.
+          </p>
         </div>
+
+        {/* Search trigger (works on every breakpoint) */}
+        <button
+          type="button"
+          onClick={() => setSearchOpen(true)}
+          className="group w-full lg:w-[32rem] lg:mx-auto flex items-center bg-surface-container-lowest rounded-full pl-5 pr-2 py-2 gap-3 shadow-lift hover:shadow-float press text-left animate-fade-up"
+          style={{ animationDelay: "120ms" }}
+          aria-label="Search experiences"
+        >
+          <span className="material-symbols-outlined text-primary">search</span>
+          <span className="flex-1 text-on-surface-variant font-medium truncate">
+            Discover experiences in Udaipur
+          </span>
+          <span className="grid place-items-center w-10 h-10 rounded-full bg-primary text-on-primary group-hover:scale-105 transition-transform">
+            <span className="material-symbols-outlined text-[20px]">tune</span>
+          </span>
+        </button>
 
         {/* Mobile category toggle */}
         <div className="flex justify-center lg:hidden">
@@ -195,7 +150,7 @@ export default function ExperiencesPage() {
             >
               Stays
             </Link>
-            <button className="flex-1 sm:flex-none py-2 px-4 sm:px-6 rounded-full bg-surface-container-lowest shadow-sm text-xs sm:text-sm font-semibold text-primary transition-all">
+            <button className="flex-1 sm:flex-none py-2 px-4 sm:px-6 rounded-full bg-surface-container-lowest shadow-soft text-xs sm:text-sm font-semibold text-primary transition-all">
               Experiences
             </button>
           </div>
@@ -203,124 +158,124 @@ export default function ExperiencesPage() {
       </section>
 
       {/* Experience categories */}
-      <section className="mb-12 overflow-x-auto no-scrollbar px-6">
-        <div className="flex gap-8 items-center min-w-max pb-2">
+      <section className="mb-14 overflow-x-auto no-scrollbar px-4 sm:px-6">
+        <div className="flex gap-6 sm:gap-8 items-center min-w-max pb-2">
           {categories.map((c) => (
-            <div
+            <button
               key={c.label}
-              className="flex flex-col items-center gap-2 group cursor-pointer"
+              type="button"
+              className="flex flex-col items-center gap-2 group press"
             >
-              <div className="p-4 rounded-2xl bg-surface-container-low group-hover:bg-primary-container/20 transition-colors">
+              <div className="p-4 rounded-2xl bg-surface-container-low group-hover:bg-primary-fixed/50 transition-colors duration-300">
                 <span className="material-symbols-outlined text-primary text-3xl">
                   {c.icon}
                 </span>
               </div>
-              <span className="text-xs font-medium text-on-surface-variant">
+              <span className="text-xs font-medium text-on-surface-variant group-hover:text-on-surface transition-colors">
                 {c.label}
               </span>
-            </div>
+            </button>
           ))}
         </div>
       </section>
 
       {/* Curated experiences */}
-      <section className="px-6 mb-16">
-        <h2 className="font-headline text-2xl font-bold tracking-tight mb-8 text-on-surface">
-          Curated Experiences in Udaipur
-        </h2>
-        <div className="space-y-8 lg:grid lg:grid-cols-2 lg:gap-8 lg:space-y-0">
-          {curatedExperiences.map((exp) => (
-            <article
-              key={exp.title}
-              className="group bg-surface-container-lowest rounded-2xl overflow-hidden shadow-sm transition-transform hover:scale-[1.01]"
-            >
-              <div className="relative aspect-[16/9] overflow-hidden">
-                <img
-                  alt={exp.title}
-                  src={exp.image}
-                  className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
-                />
-                {exp.badge && (
-                  <div className="absolute top-4 right-4 bg-surface/80 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold text-primary">
-                    {exp.badge}
-                  </div>
-                )}
-              </div>
-              <div className="p-6">
-                <div className="flex justify-between items-start mb-2 gap-4">
-                  <h3 className="font-headline text-xl font-bold text-on-surface">
-                    {exp.title}
-                  </h3>
-                  <span className="text-primary font-bold text-lg whitespace-nowrap">
-                    {exp.price}{" "}
-                    <span className="text-on-surface-variant text-xs font-normal">
-                      {exp.unit}
-                    </span>
-                  </span>
+      <section className="px-4 sm:px-6 mb-16 max-w-7xl mx-auto">
+        <Reveal>
+          <h2 className="font-headline text-2xl sm:text-3xl font-semibold tracking-tight mb-7 text-on-surface">
+            Curated experiences in Udaipur
+          </h2>
+        </Reveal>
+        <div className="space-y-7 lg:grid lg:grid-cols-2 lg:gap-7 lg:space-y-0">
+          {curatedExperiences.map((exp, i) => (
+            <Reveal key={exp.title} delay={i * 80}>
+              <article className="group bg-surface-container-lowest rounded-3xl overflow-hidden shadow-soft hover-lift hover:shadow-lift h-full">
+                <div className="relative aspect-[16/9] overflow-hidden">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    alt={exp.title}
+                    src={exp.image}
+                    className="w-full h-full object-cover transition-transform duration-[900ms] ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-110"
+                  />
+                  {exp.badge && (
+                    <div className="absolute top-4 left-4 glass px-3 py-1 rounded-full text-[11px] font-bold tracking-wide text-primary shadow-soft">
+                      {exp.badge}
+                    </div>
+                  )}
                 </div>
-                <p className="text-on-surface-variant text-sm mb-4 leading-relaxed">
-                  {exp.description}
-                </p>
-                <div className="flex items-center gap-4 text-xs text-on-surface-variant font-medium flex-wrap">
-                  {exp.meta.map((m) => (
-                    <span key={m.text} className="flex items-center gap-1">
-                      <span className="material-symbols-outlined text-sm">
-                        {m.icon}
+                <div className="p-6">
+                  <div className="flex justify-between items-start mb-2 gap-4">
+                    <h3 className="font-headline text-xl font-semibold text-on-surface">
+                      {exp.title}
+                    </h3>
+                    <span className="text-primary font-bold text-lg whitespace-nowrap">
+                      {exp.price}{" "}
+                      <span className="text-on-surface-variant text-xs font-normal">
+                        {exp.unit}
                       </span>
-                      {m.text}
                     </span>
-                  ))}
+                  </div>
+                  <p className="text-on-surface-variant text-sm mb-4 leading-relaxed">
+                    {exp.description}
+                  </p>
+                  <div className="flex items-center gap-4 text-xs text-on-surface-variant font-medium flex-wrap">
+                    {exp.meta.map((m) => (
+                      <span key={m.text} className="flex items-center gap-1">
+                        <span className="material-symbols-outlined text-sm">
+                          {m.icon}
+                        </span>
+                        {m.text}
+                      </span>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            </article>
+              </article>
+            </Reveal>
           ))}
         </div>
       </section>
 
       {/* Beyond the City */}
-      <section className="mb-16 px-6">
-        <div className="flex justify-between items-end mb-6">
+      <section className="mb-16 px-4 sm:px-6 max-w-7xl mx-auto">
+        <Reveal className="flex justify-between items-end mb-6">
           <div>
-            <h2 className="font-headline text-2xl font-bold tracking-tight text-on-surface">
-              Beyond the City
+            <h2 className="font-headline text-2xl sm:text-3xl font-semibold tracking-tight text-on-surface">
+              Beyond the city
             </h2>
-            <p className="text-on-surface-variant text-sm">
+            <p className="text-on-surface-variant text-sm mt-0.5">
               Curated day trips from Udaipur
             </p>
           </div>
-          <button className="text-primary font-bold text-sm hover:underline">
-            View All
+          <button className="text-primary font-semibold text-sm hover:underline">
+            View all
           </button>
-        </div>
-        <div className="flex gap-6 overflow-x-auto no-scrollbar pb-4 -mx-6 px-6">
+        </Reveal>
+        <div className="flex gap-6 overflow-x-auto no-scrollbar pb-4 -mx-4 px-4 sm:-mx-6 sm:px-6">
           {dayTrips.map((trip) => (
             <div
               key={trip.title}
-              className={`min-w-[300px] bg-surface-container-low rounded-lg p-3 ${
-                trip.muted ? "opacity-60" : ""
-              }`}
+              className="group min-w-[300px] flex-none"
             >
-              <div className="relative h-48 rounded-2xl overflow-hidden mb-4">
+              <div className="relative h-52 rounded-3xl overflow-hidden shadow-soft hover-lift hover:shadow-lift">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   alt={trip.title}
                   src={trip.image}
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
-                <div className="absolute bottom-4 left-4 text-white">
-                  <h4 className="font-bold">{trip.title}</h4>
-                  <p className="text-xs opacity-90">{trip.distance}</p>
-                </div>
-              </div>
-              <div className="flex justify-between items-center px-1">
-                <span className="text-sm font-bold text-primary">
-                  {trip.price}
-                </span>
-                <button className="bg-primary text-white p-2 rounded-full leading-[0]">
-                  <span className="material-symbols-outlined text-sm">
-                    arrow_forward
+                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
+                <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between text-white">
+                  <div>
+                    <h4 className="font-bold font-headline">{trip.title}</h4>
+                    <p className="text-xs opacity-90">{trip.distance}</p>
+                    <p className="text-sm font-bold mt-1">{trip.price}</p>
+                  </div>
+                  <span className="grid place-items-center bg-white/90 text-primary w-9 h-9 rounded-full group-hover:scale-110 transition-transform">
+                    <span className="material-symbols-outlined text-[20px]">
+                      arrow_outward
+                    </span>
                   </span>
-                </button>
+                </div>
               </div>
             </div>
           ))}
@@ -328,10 +283,10 @@ export default function ExperiencesPage() {
       </section>
 
       {/* Popular stays — wired to API */}
-      <section className="space-y-4 mb-10">
-        <div className="px-6 flex justify-between items-end">
-          <h3 className="text-xl font-headline font-bold text-on-surface">
-            Popular stays with UNESTA
+      <section className="mb-16 max-w-7xl mx-auto">
+        <Reveal className="px-4 sm:px-6 flex justify-between items-end mb-5">
+          <h3 className="text-xl sm:text-2xl font-headline font-semibold text-on-surface">
+            Popular stays with UNesta
           </h3>
           <Link
             href="/"
@@ -339,124 +294,94 @@ export default function ExperiencesPage() {
           >
             View all
           </Link>
-        </div>
-        <div className="flex overflow-x-auto gap-6 px-6 hide-scrollbar">
+        </Reveal>
+        <div className="flex overflow-x-auto gap-4 sm:gap-6 px-4 sm:px-6 pb-2 hide-scrollbar snap-x">
           {loading
             ? Array.from({ length: 6 }).map((_, i) => (
                 <SkeletonStayCard key={i} />
               ))
             : stays.map((stay) => (
-                <Link
-                  href={`/stays/${stay.id}`}
+                <StayCard
                   key={stay.id}
-                  className="flex-none w-72 space-y-3 group block"
-                >
-                  <div className="relative aspect-[4/3.75] rounded-lg overflow-hidden bg-surface-container-low group">
-                    <img
-                      alt={stay.title}
-                      src={
-                        stay.images[0]?.url ||
-                        "https://via.placeholder.com/800x600?text=No+Image"
-                      }
-                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                    />
-                    <div className="absolute top-4 right-4 bg-surface/70 backdrop-blur-md p-2 rounded-full cursor-pointer">
-                      <span className="material-symbols-outlined text-primary text-lg">
-                        favorite
-                      </span>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex justify-between items-start">
-                      <h4 className="font-bold text-on-surface group-hover:text-primary transition-colors line-clamp-1">
-                        {stay.title}
-                      </h4>
-                      <div className="flex items-center gap-1 flex-shrink-0">
-                        <span
-                          className="material-symbols-outlined text-xs text-primary"
-                          style={{ fontVariationSettings: "'FILL' 1" }}
-                        >
-                          star
-                        </span>
-                        <span className="text-sm font-medium">4.9</span>
-                      </div>
-                    </div>
-                    <p className="text-sm text-on-surface-variant">
-                      {stay.city}, {stay.state}
-                    </p>
-                    <p className="text-lg font-headline font-bold text-primary mt-1">
-                      {currency.format(stay.basePrice)}{" "}
-                      <span className="text-xs font-normal text-on-surface-variant">
-                        / night
-                      </span>
-                    </p>
-                  </div>
-                </Link>
+                  stay={stay}
+                  className="flex-none w-72 snap-start"
+                />
               ))}
         </div>
       </section>
 
       {/* Host your space CTA */}
-      <section className="px-4 sm:px-6 mb-12">
-        <div className="relative min-h-[300px] sm:min-h-[400px] lg:min-h-[500px] rounded-lg overflow-hidden flex flex-col justify-end p-6 sm:p-12 border border-outline-variant/20 shadow-xl group lg:w-[70%] lg:mx-auto">
+      <section className="px-4 sm:px-6 mb-16 max-w-7xl mx-auto">
+        <Reveal
+          as="div"
+          className="relative min-h-[320px] sm:min-h-[420px] rounded-[2rem] overflow-hidden flex flex-col justify-end p-7 sm:p-12 shadow-float group"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             alt="Luxury villa interior"
             className="absolute inset-0 w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105"
             src="https://lh3.googleusercontent.com/aida-public/AB6AXuDEqhQmCiXMx_skv2iuJZKGP2vmZKLJ2W9swkiYTDdLd8XfMkBa989CWm2oW5OJzCKT-XSi7uDDKk6NJyB7vN80Otxo8Kbawf_itr0VUvMbnZIram6Z4WpiZB6KbISJFGuJuHs8EQetttVJu1Pel1GGW4_SJ7rH7QUSfcddsNLuBrc-J1xDKwOm4Wbk3c1pThncz-tOfvYvGSLDzRXdAOA6kB_k3HbXknZ61iTgv3P1RFvh89sluMq7OCNWNTvKvYBf4xMiBEyws78"
           />
-          <div className="absolute inset-0 bg-gradient-to-tr from-black/80 via-black/40 to-transparent"></div>
-          <div className="relative z-10 max-w-md space-y-4 sm:space-y-6">
-            <div className="space-y-2 sm:space-y-3">
-              <h3 className="text-2xl sm:text-4xl font-headline font-extrabold text-white leading-tight tracking-tight">
-                Host your space
-              </h3>
-              <p className="text-white/90 font-medium text-sm sm:text-base leading-relaxed">
-                Join our community of exceptional hosts and share your sanctuary
-                with a global audience of conscious travelers.
-              </p>
-            </div>
-            <button className="inline-flex items-center justify-center bg-primary hover:bg-primary-container text-white px-6 sm:px-10 py-3 sm:py-4 rounded-full font-bold text-xs sm:text-sm transition-all transform hover:translate-y-[-2px] shadow-lg shadow-primary/30 active:scale-95">
-              Become a Host
-            </button>
+          <div className="absolute inset-0 bg-gradient-to-tr from-black/85 via-black/40 to-transparent" />
+          <div className="relative z-10 max-w-md space-y-5">
+            <h3 className="text-2xl sm:text-4xl font-headline font-semibold text-white leading-tight tracking-tight">
+              Host your space
+            </h3>
+            <p className="text-white/90 font-medium text-sm sm:text-base leading-relaxed">
+              Join our community of exceptional hosts and share your sanctuary
+              with a global audience of conscious travelers.
+            </p>
+            <a
+              href={HOST_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 bg-white text-primary px-7 sm:px-9 py-3.5 rounded-full font-bold text-sm press shadow-lg hover:shadow-xl"
+            >
+              Become a host
+              <span className="material-symbols-outlined text-[18px]">
+                arrow_forward
+              </span>
+            </a>
           </div>
-        </div>
+        </Reveal>
       </section>
 
       {/* Travel Stories */}
-      <section className="space-y-4 mb-12">
-        <div className="px-6 flex justify-between items-end">
-          <h3 className="text-xl font-headline font-bold text-on-surface">
-            Travel Stories
+      <section className="mb-12 max-w-7xl mx-auto">
+        <Reveal className="px-4 sm:px-6 flex justify-between items-end mb-5">
+          <h3 className="text-xl sm:text-2xl font-headline font-semibold text-on-surface">
+            Travel stories
           </h3>
           <button className="text-sm font-semibold text-primary hover:underline">
             Read blog
           </button>
-        </div>
-        <div className="flex overflow-x-auto gap-6 px-6 hide-scrollbar">
+        </Reveal>
+        <div className="flex overflow-x-auto gap-5 sm:gap-6 px-4 sm:px-6 pb-2 hide-scrollbar">
           {stories.map((s) => (
-            <div
+            <article
               key={s.title}
-              className="flex-none w-72 group cursor-pointer space-y-3"
+              className="flex-none w-72 group cursor-pointer"
             >
-              <div className="relative aspect-square rounded-lg overflow-hidden">
+              <div className="relative aspect-square rounded-3xl overflow-hidden shadow-soft hover-lift hover:shadow-lift">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   alt={s.title}
                   src={s.image}
                   className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                 />
               </div>
-              <div className="space-y-1">
+              <div className="space-y-1 mt-3">
                 <span className="text-[10px] font-bold uppercase tracking-widest text-primary">
                   {s.tag}
                 </span>
-                <h4 className="text-lg font-headline font-bold leading-snug group-hover:text-primary transition-colors">
+                <h4 className="text-lg font-headline font-semibold leading-snug group-hover:text-primary transition-colors">
                   {s.title}
                 </h4>
                 <p className="text-sm text-on-surface-variant line-clamp-2">
                   {s.excerpt}
                 </p>
               </div>
-            </div>
+            </article>
           ))}
         </div>
       </section>

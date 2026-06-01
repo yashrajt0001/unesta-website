@@ -2,14 +2,22 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import {
+  ApiError,
   fetchListingDetails,
   fetchPriceBreakdown,
   type ListingDetails,
   type PriceBreakdown,
 } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
+import { useToast } from "@/lib/toast";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { WishlistHeart } from "@/components/ui/WishlistHeart";
+import { ImageCarousel } from "@/components/ui/ImageCarousel";
+import { BottomSheet } from "@/components/ui/BottomSheet";
+import { DateRangePicker } from "@/components/ui/DateRangePicker";
+import { Reveal } from "@/components/ui/Reveal";
 
 const currency = new Intl.NumberFormat("en-IN", {
   style: "currency",
@@ -20,34 +28,81 @@ const currency = new Intl.NumberFormat("en-IN", {
 const shortDate = (d: string) =>
   new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
+function todayIso() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function addDaysIso(base: string, days: number) {
+  const d = new Date(base);
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
 export default function PropertyDetailsPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
+  const router = useRouter();
+  const { isAuthenticated } = useAuth();
+  const toast = useToast();
 
   const [listing, setListing] = useState<ListingDetails | null>(null);
   const [pricing, setPricing] = useState<PriceBreakdown | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const [checkIn, setCheckIn] = useState("2026-10-12");
-  const [checkOut, setCheckOut] = useState("2026-10-15");
+  const today = todayIso();
+  const [checkIn, setCheckIn] = useState(addDaysIso(today, 1));
+  const [checkOut, setCheckOut] = useState(addDaysIso(today, 4));
   const [adults, setAdults] = useState(2);
   const [children, setChildren] = useState(0);
   const [modalOpen, setModalOpen] = useState(false);
+  const [datesError, setDatesError] = useState<string | null>(null);
 
   const guests = adults + children;
 
   useEffect(() => {
+    let cancelled = false;
     fetchListingDetails(id)
-      .then(setListing)
-      .catch((e: Error) => setError(e.message));
+      .then((d) => {
+        if (!cancelled) setListing(d);
+      })
+      .catch((e: unknown) => {
+        if (!cancelled)
+          setError(
+            e instanceof ApiError ? e.message : "Could not load this stay.",
+          );
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
+  // Clamp dates and validate
+  useEffect(() => {
+    if (new Date(checkOut) <= new Date(checkIn)) {
+      setDatesError("Check-out must be after check-in.");
+    } else if (listing && guests > listing.maxGuests) {
+      setDatesError(`This stay allows up to ${listing.maxGuests} guests.`);
+    } else {
+      setDatesError(null);
+    }
+  }, [checkIn, checkOut, guests, listing]);
+
+  // Fetch price breakdown (only when inputs are valid)
   useEffect(() => {
     if (!listing) return;
+    if (datesError) return;
+    let cancelled = false;
     fetchPriceBreakdown({ listingId: listing.id, checkIn, checkOut, guests })
-      .then(setPricing)
-      .catch(() => setPricing(null));
-  }, [listing, checkIn, checkOut, guests]);
+      .then((p) => {
+        if (!cancelled) setPricing(p);
+      })
+      .catch(() => {
+        if (!cancelled) setPricing(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [listing, checkIn, checkOut, guests, datesError]);
 
   const bookHref = useMemo(() => {
     const qp = new URLSearchParams({
@@ -58,7 +113,35 @@ export default function PropertyDetailsPage() {
     return `/stays/${id}/book?${qp.toString()}`;
   }, [id, checkIn, checkOut, guests]);
 
-  if (error) return <div className="p-6 text-error">{error}</div>;
+  function handleBookClick(e: React.MouseEvent) {
+    if (datesError) {
+      e.preventDefault();
+      toast.error(datesError);
+      return;
+    }
+    if (!isAuthenticated) {
+      e.preventDefault();
+      router.push(`/login?next=${encodeURIComponent(bookHref)}`);
+    }
+  }
+
+  if (error) {
+    return (
+      <div className="max-w-2xl mx-auto p-6 mt-8">
+        <div className="rounded-3xl bg-error-container/40 p-6 text-on-error-container">
+          <p className="font-semibold">Couldn’t load this stay</p>
+          <p className="text-sm mt-1">{error}</p>
+          <Link
+            href="/"
+            className="inline-block mt-3 text-sm font-bold underline"
+          >
+            Back to explore
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   if (!listing) return <PropertyDetailsSkeleton />;
 
   const cover =
@@ -68,643 +151,466 @@ export default function PropertyDetailsPage() {
   const grid = listing.images.slice(0, 5);
 
   return (
-    <div className="bg-background text-on-surface">
-      <section className="mt-4 relative">
-        {/* Mobile slider */}
-        <div className="lg:hidden">
-          <div className="flex overflow-x-auto snap-x snap-mandatory no-scrollbar px-4 gap-4">
-            {(grid.length ? grid : [{ id: "ph", url: cover }]).map((img) => (
-              <div key={img.id} className="flex-none w-[75vw] snap-center">
+    <div className="text-on-surface">
+      <section className="mt-2 sm:mt-4 relative">
+        {/* Mobile — swipeable gallery */}
+        <div className="lg:hidden relative">
+          <ImageCarousel
+            images={grid.length ? grid : [{ id: "ph", url: cover }]}
+            alt={listing.title}
+            className="overflow-hidden sm:rounded-3xl sm:mx-4"
+          />
+          <div className="absolute top-4 right-4 sm:right-8 z-10">
+            <WishlistHeart listingId={listing.id} />
+          </div>
+        </div>
+
+        {/* Desktop gallery */}
+        <div className="hidden lg:block max-w-7xl mx-auto px-6 relative">
+          <div className="grid grid-cols-4 grid-rows-2 gap-3 h-[460px] rounded-3xl overflow-hidden">
+            <div className="col-span-2 row-span-2 relative overflow-hidden group">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={grid[0]?.url || cover}
+                alt={listing.title}
+                className="w-full h-full object-cover group-hover:scale-105 transition duration-700"
+              />
+            </div>
+            {[1, 2, 3, 4].map((idx) => (
+              <div key={idx} className="relative overflow-hidden group">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={img.url}
+                  src={grid[idx]?.url || cover}
                   alt={listing.title}
-                  className="w-full aspect-[4/5] object-cover rounded-lg shadow-sm"
+                  className="w-full h-full object-cover group-hover:scale-105 transition duration-700"
                 />
               </div>
             ))}
           </div>
-        </div>
-
-        {/* Desktop gallery grid */}
-        <div className="hidden lg:block max-w-7xl mx-auto px-6">
-          <div className="grid grid-cols-4 grid-rows-2 gap-4 h-[448px]">
-            <div className="col-span-2 row-span-2 relative overflow-hidden rounded-l-lg">
-              <img
-                src={grid[0]?.url || cover}
-                alt={listing.title}
-                className="w-full h-full object-cover hover:scale-105 transition duration-700"
-              />
-            </div>
-            <div className="relative overflow-hidden">
-              <img
-                src={grid[1]?.url || cover}
-                alt={listing.title}
-                className="w-full h-full object-cover hover:scale-105 transition duration-700"
-              />
-            </div>
-            <div className="relative overflow-hidden rounded-tr-lg">
-              <img
-                src={grid[2]?.url || cover}
-                alt={listing.title}
-                className="w-full h-full object-cover hover:scale-105 transition duration-700"
-              />
-            </div>
-            <div className="relative overflow-hidden">
-              <img
-                src={grid[3]?.url || cover}
-                alt={listing.title}
-                className="w-full h-full object-cover hover:scale-105 transition duration-700"
-              />
-            </div>
-            <div className="relative overflow-hidden rounded-br-lg">
-              <img
-                src={grid[4]?.url || cover}
-                alt={listing.title}
-                className="w-full h-full object-cover hover:scale-105 transition duration-700"
-              />
-            </div>
+          <div className="absolute top-4 right-10">
+            <WishlistHeart listingId={listing.id} />
           </div>
         </div>
       </section>
 
-      <div className="max-w-7xl mx-auto px-6 mt-10 grid grid-cols-1 lg:grid-cols-12 gap-12">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 mt-8 lg:mt-10 grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12">
         {/* Left column */}
-        <div className="lg:col-span-8 space-y-12">
-          {/* Title */}
-          <div className="space-y-4">
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="bg-secondary-container text-on-secondary-container px-3 py-1 rounded-full text-xs font-bold tracking-wider uppercase font-label">
-                Heritage Suite
-              </span>
-              <div className="flex items-center gap-1 text-primary">
+        <div className="lg:col-span-8 space-y-10">
+          <Reveal className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1 text-on-accent-container bg-accent-container rounded-full px-2.5 py-1 text-xs font-bold">
                 <span
-                  className="material-symbols-outlined text-sm"
+                  className="material-symbols-outlined text-[15px]"
                   style={{ fontVariationSettings: "'FILL' 1" }}
                 >
                   star
                 </span>
-                <span className="font-bold text-sm">4.8</span>
-                <span className="text-on-surface-variant font-normal">
-                  (124 reviews)
-                </span>
-              </div>
+                New stay
+              </span>
             </div>
-            <h2 className="text-4xl font-extrabold font-headline tracking-tight leading-tight text-on-surface">
+            <h2 className="text-3xl lg:text-4xl font-semibold font-headline tracking-tight leading-tight text-on-surface">
               {listing.title}
             </h2>
             <div className="flex items-center gap-2 text-on-surface-variant">
-              <span className="material-symbols-outlined text-primary">
+              <span className="material-symbols-outlined text-primary text-[20px]">
                 location_on
               </span>
-              <span className="text-lg font-medium">
+              <span className="text-base font-medium">
                 {listing.city}, {listing.state}
               </span>
             </div>
-          </div>
+          </Reveal>
 
-          {/* Description */}
-          <div className="space-y-4">
-            <h3 className="text-xl font-bold font-headline text-on-surface">
-              About the Sanctuary
+          {/* Quick facts */}
+          <Reveal className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { icon: "king_bed", label: "Bedrooms", value: listing.bedrooms },
+              { icon: "bed", label: "Beds", value: listing.beds },
+              { icon: "bathtub", label: "Baths", value: listing.bathrooms },
+              { icon: "group", label: "Guests", value: listing.maxGuests },
+            ].map((f) => (
+              <div
+                key={f.label}
+                className="flex flex-col gap-1 p-4 bg-surface-container-low rounded-2xl"
+              >
+                <span className="material-symbols-outlined text-primary text-[22px]">
+                  {f.icon}
+                </span>
+                <span className="text-lg font-headline font-semibold leading-none mt-1">
+                  {f.value}
+                </span>
+                <span className="text-xs text-on-surface-variant">
+                  {f.label}
+                </span>
+              </div>
+            ))}
+          </Reveal>
+
+          <Reveal className="space-y-3">
+            <h3 className="text-xl font-semibold font-headline">
+              About this stay
             </h3>
-            <p className="text-lg leading-relaxed text-on-surface-variant font-body">
+            <p className="text-base leading-relaxed text-on-surface-variant whitespace-pre-line">
               {listing.description}
             </p>
-            <p className="text-sm text-on-surface-variant">
-              {listing.bedrooms} bedrooms · {listing.beds} beds ·{" "}
-              {listing.bathrooms} baths · Up to {listing.maxGuests} guests
-            </p>
-          </div>
+          </Reveal>
 
-          {/* Amenities */}
-          <div className="space-y-6">
-            <h3 className="text-xl font-bold font-headline text-on-surface">
-              Curated Amenities
-            </h3>
-            <div className="grid grid-cols-2 gap-3">
-              {(listing.amenities.length
-                ? listing.amenities.slice(0, 6)
-                : [
-                    { amenity: { id: "1", name: "Rooftop Pool", icon: "pool" } },
-                    {
-                      amenity: {
-                        id: "2",
-                        name: "Authentic Cuisine",
-                        icon: "restaurant",
-                      },
-                    },
-                    { amenity: { id: "3", name: "Lake View", icon: "water" } },
-                    {
-                      amenity: {
-                        id: "4",
-                        name: "Heritage Suite",
-                        icon: "castle",
-                      },
-                    },
-                  ]
-              ).map((a) => (
-                <div
-                  key={a.amenity.id}
-                  className="flex items-center gap-3 p-3 bg-surface-container-low rounded-lg"
-                >
-                  <span className="material-symbols-outlined text-primary text-[24px]">
-                    {a.amenity.icon || "check_circle"}
-                  </span>
-                  <span className="text-sm font-medium text-on-surface">
-                    {a.amenity.name}
-                  </span>
-                </div>
-              ))}
-            </div>
-            {listing.amenities.length > 6 && (
-              <button className="w-full py-4 border border-outline-variant/30 rounded-full text-on-surface font-semibold hover:bg-surface-container-low transition-colors">
-                Show all {listing.amenities.length} amenities
-              </button>
-            )}
-          </div>
+          {listing.amenities.length > 0 && (
+            <Reveal className="space-y-5">
+              <h3 className="text-xl font-semibold font-headline">
+                What this place offers
+              </h3>
+              <div className="grid grid-cols-2 gap-3">
+                {listing.amenities.slice(0, 6).map((a) => (
+                  <div
+                    key={a.amenity.id}
+                    className="flex items-center gap-3 p-3.5 bg-surface-container-low rounded-2xl hover:bg-surface-container transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-primary">
+                      {a.amenity.icon || "check_circle"}
+                    </span>
+                    <span className="text-sm font-medium">{a.amenity.name}</span>
+                  </div>
+                ))}
+              </div>
+              {listing.amenities.length > 6 && (
+                <p className="text-sm text-on-surface-variant">
+                  + {listing.amenities.length - 6} more
+                </p>
+              )}
+            </Reveal>
+          )}
 
-          {/* Host card */}
-          <div className="bg-surface-container-lowest p-8 rounded-lg shadow-[0_8px_40px_-15px_rgba(0,0,0,0.04)] space-y-6">
-            <h3 className="text-lg font-bold font-headline text-on-surface border-b border-surface-container-low pb-4">
-              Your Concierge
+          <Reveal
+            as="div"
+            className="bg-surface-container-lowest p-6 sm:p-8 rounded-3xl shadow-soft space-y-5"
+          >
+            <h3 className="text-lg font-semibold font-headline border-b border-surface-container pb-3">
+              Your host
             </h3>
             <div className="flex items-center gap-4">
-              <div className="relative">
-                <img
-                  className="w-16 h-16 rounded-full object-cover"
-                  alt={`${listing.host.firstName} ${listing.host.lastName}`}
-                  src={
-                    listing.host.avatarUrl ||
-                    "https://lh3.googleusercontent.com/aida-public/AB6AXuCmbXobg675mZS2Gc0mOw-llw_LTCHcNHA_kbaY4aUOp8pYLqPyyiEwpOyZ4nJY8BpFyeHp5AncpfjpThGRUFPxRi6MpmFMr6oc79oiknmJeF9WT7krMyO84Xqpp7eZakthPA3rMRe9MRfskbFTLCKg_2KeaTlsLiN4uuriLYy3PD9JWqsT_9AicWBgpTdMaTr7QeaHJ0yL22MhZyLSs2ghdASAPTtEszirEGenkkmmMDeBA59mxMXjGeNCfcAk0FdaZPZIG1E9Iek"
-                  }
-                />
-                <div className="absolute -bottom-1 -right-1 bg-primary text-white p-1 rounded-full border-2 border-white">
-                  <span
-                    className="material-symbols-outlined text-[12px]"
-                    style={{ fontVariationSettings: "'FILL' 1" }}
-                  >
-                    verified
-                  </span>
-                </div>
-              </div>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                className="w-14 h-14 rounded-full object-cover bg-surface-container-low ring-2 ring-primary-fixed/50"
+                alt={`${listing.host.firstName ?? "Host"} ${listing.host.lastName ?? ""}`}
+                src={
+                  listing.host.avatarUrl ||
+                  "https://api.dicebear.com/7.x/initials/svg?seed=" +
+                    encodeURIComponent(listing.host.firstName ?? "Host")
+                }
+              />
               <div>
-                <p className="font-bold text-on-surface text-lg leading-none">
+                <p className="font-bold text-base">
                   {listing.host.firstName} {listing.host.lastName}
                 </p>
-                <div className="flex items-center gap-1 mt-1">
-                  <span className="bg-secondary-container text-on-secondary-container text-[10px] px-2 py-0.5 rounded font-bold uppercase tracking-wider">
-                    Superhost
-                  </span>
-                </div>
+                <p className="text-xs text-on-surface-variant">
+                  Hosted with UNesta
+                </p>
               </div>
             </div>
-            <p className="text-sm text-on-surface-variant leading-relaxed italic">
-              &ldquo;I personally ensure every guest experiences the royal
-              hospitality my family has curated for generations.&rdquo;
-            </p>
-            <button className="w-full py-4 border border-outline-variant/30 rounded-full text-on-surface font-semibold hover:bg-surface-container-low transition-colors">
-              Message {listing.host.firstName}
-            </button>
-          </div>
+          </Reveal>
 
-          {/* Things to know */}
-          <div className="space-y-6">
-            <h3 className="text-xl font-bold font-headline text-on-surface">
-              Things to know
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              <div className="space-y-3">
-                <h4 className="font-bold text-on-surface flex items-center gap-2">
-                  <span className="material-symbols-outlined text-on-surface-variant">
-                    event_busy
-                  </span>
-                  Cancellation policy
-                </h4>
-                <div className="space-y-2 text-sm text-on-surface-variant leading-relaxed">
-                  <p>
-                    Free cancellation before check-in. After that, the
-                    reservation is non-refundable.
-                  </p>
-                </div>
-              </div>
-              <div className="space-y-3">
-                <h4 className="font-bold text-on-surface flex items-center gap-2">
-                  <span className="material-symbols-outlined text-on-surface-variant">
-                    schedule
-                  </span>
-                  House rules
-                </h4>
-                <div className="space-y-2 text-sm text-on-surface-variant leading-relaxed">
-                  {listing.houseRules.length ? (
-                    listing.houseRules.map((r) => (
-                      <p key={r.id}>{r.ruleText}</p>
-                    ))
-                  ) : (
-                    <>
-                      <p>Check-in after 12:00 pm</p>
-                      <p>Checkout before 11:00 am</p>
-                      <p>{listing.maxGuests} guests maximum</p>
-                    </>
-                  )}
-                </div>
-              </div>
-              <div className="space-y-3">
-                <h4 className="font-bold text-on-surface flex items-center gap-2">
-                  <span className="material-symbols-outlined text-on-surface-variant">
-                    health_and_safety
-                  </span>
-                  Safety &amp; property
-                </h4>
-                <div className="space-y-2 text-sm text-on-surface-variant leading-relaxed">
-                  <p>Smoke alarm installed</p>
-                  <p>Carbon monoxide alarm installed</p>
-                </div>
-              </div>
-            </div>
-          </div>
+          {listing.houseRules.length > 0 && (
+            <Reveal className="space-y-4">
+              <h3 className="text-xl font-semibold font-headline">
+                House rules
+              </h3>
+              <ul className="space-y-2 text-sm text-on-surface-variant">
+                {listing.houseRules.map((r) => (
+                  <li key={r.id} className="flex items-start gap-2">
+                    <span className="material-symbols-outlined text-base text-primary mt-0.5">
+                      check
+                    </span>
+                    {r.ruleText}
+                  </li>
+                ))}
+              </ul>
+            </Reveal>
+          )}
         </div>
 
-        {/* Right column — desktop reservation card */}
+        {/* Right column — desktop reservation */}
         <div className="lg:col-span-4 space-y-8">
-          <div className="hidden lg:block bg-surface-container-lowest p-8 rounded-lg shadow-[0_8px_40px_-15px_rgba(0,0,0,0.04)] space-y-6">
-            <h3 className="text-lg font-bold font-headline text-on-surface border-b border-surface-container pb-4">
-              Reserve your stay
-            </h3>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                  Check-in
-                </label>
-                <input
-                  type="date"
-                  value={checkIn}
-                  onChange={(e) => setCheckIn(e.target.value)}
-                  className="w-full rounded-2xl border border-outline px-4 py-3 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                  Check-out
-                </label>
-                <input
-                  type="date"
-                  value={checkOut}
-                  onChange={(e) => setCheckOut(e.target.value)}
-                  className="w-full rounded-2xl border border-outline px-4 py-3 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30"
-                />
-              </div>
+          <div className="hidden lg:block bg-surface-container-lowest p-6 rounded-3xl shadow-float space-y-5 sticky top-24">
+            <div className="flex items-baseline justify-between border-b border-surface-container pb-3">
+              <span className="text-2xl font-semibold font-headline">
+                {currency.format(listing.basePrice)}
+              </span>
+              <span className="text-sm text-on-surface-variant">/ night</span>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                  Adults
-                </label>
-                <input
-                  type="number"
-                  min={1}
-                  value={adults}
-                  onChange={(e) =>
-                    setAdults(Math.max(1, Number(e.target.value) || 1))
-                  }
-                  className="w-full rounded-2xl border border-outline px-4 py-3 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                  Children
-                </label>
-                <input
-                  type="number"
-                  min={0}
-                  value={children}
-                  onChange={(e) =>
-                    setChildren(Math.max(0, Number(e.target.value) || 0))
-                  }
-                  className="w-full rounded-2xl border border-outline px-4 py-3 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30"
-                />
-              </div>
-            </div>
-            <div className="bg-surface-container p-4 rounded-3xl border border-surface-container-low">
-              <div className="flex items-center justify-between text-on-surface-variant text-sm">
-                <span>Nightly rate</span>
-                <span className="font-bold text-on-surface">
-                  {currency.format(listing.basePrice)}
-                </span>
-              </div>
-              <div className="flex items-center justify-between mt-2 text-sm text-on-surface-variant">
-                <span>Cleaning fee</span>
-                <span className="font-bold text-on-surface">
-                  {currency.format(
-                    pricing?.cleaningFee ?? listing.cleaningFee ?? 0
-                  )}
-                </span>
-              </div>
-              <div className="flex items-center justify-between mt-2 text-sm text-on-surface-variant">
-                <span>Service fee</span>
-                <span className="font-bold text-on-surface">
-                  {currency.format(pricing?.guestServiceFee ?? 0)}
-                </span>
-              </div>
-              <div className="border-t border-surface-container-high pt-3 mt-3 flex items-center justify-between font-bold text-on-surface">
-                <span>Total</span>
-                <span>
-                  {currency.format(
-                    pricing?.totalAmount ?? listing.basePrice
-                  )}
-                </span>
-              </div>
-            </div>
+            <DateGuestFields
+              checkIn={checkIn}
+              checkOut={checkOut}
+              adults={adults}
+              children={children}
+              today={today}
+              onCheckIn={setCheckIn}
+              onCheckOut={setCheckOut}
+              onAdults={setAdults}
+              onChildren={setChildren}
+              maxGuests={listing.maxGuests}
+            />
+            <PriceSummary
+              basePrice={listing.basePrice}
+              cleaningFee={listing.cleaningFee}
+              pricing={pricing}
+            />
+            {datesError && (
+              <p role="alert" className="text-sm text-error font-medium">
+                {datesError}
+              </p>
+            )}
             <Link
               href={bookHref}
-              className="block text-center w-full bg-primary text-white py-4 rounded-full font-bold text-sm hover:opacity-90 transition-opacity shadow-lg shadow-primary/20"
+              onClick={handleBookClick}
+              aria-disabled={!!datesError}
+              className={`block text-center w-full py-4 rounded-full font-bold text-sm press ${
+                datesError
+                  ? "bg-surface-container-high text-on-surface-variant pointer-events-none"
+                  : "bg-primary text-on-primary shadow-glow-primary hover:brightness-105"
+              }`}
             >
-              Book Now
+              {isAuthenticated ? "Reserve" : "Log in to reserve"}
             </Link>
-          </div>
-
-          {/* Map */}
-          <div className="space-y-4">
-            <h3 className="text-xl font-bold font-headline text-on-surface">
-              Location
-            </h3>
-            <div className="bg-surface-container-low rounded-lg overflow-hidden h-64 relative group">
-              <img
-                alt="Map"
-                className="w-full h-full object-cover"
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuA63_dDW2M-Skq4enra9e60xg01ocPOkeE9NlF_h3su4sWxi7prQ2x377s09PibafMuMq5U4ZM4aomXXRNKJp0LwfNKLBVX5-BIfx3fTjGpRUV31O3qaPc-EOScxmMlNSyRb1zcQ37XIxG1OKOwJZw6Ad8B6IuAHQ81_6DDcqJ2BkRwW9cKuqjLTjRg1QqAj854NIIlrG2iXx4QfYogE3bAJl0KyyLEt-uATzhPy2vefaUQTCl1-Aub_FMUaRcWyg4L5Wx6AQ8uKWg"
-              />
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div className="bg-primary text-white p-3 rounded-full shadow-xl ring-8 ring-primary/20">
-                  <span className="material-symbols-outlined">location_on</span>
-                </div>
-              </div>
-            </div>
+            <p className="text-xs text-on-surface-variant text-center">
+              You won&apos;t be charged yet.
+            </p>
           </div>
         </div>
       </div>
 
       {/* Mobile sticky bottom bar */}
-      <div className="fixed bottom-20 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-surface-container py-4 px-6 z-30 lg:hidden">
-        <div className="flex items-center justify-between max-w-7xl mx-auto">
+      <div className="fixed bottom-24 sm:bottom-28 left-0 right-0 px-4 z-30 lg:hidden">
+        <div className="glass rounded-full shadow-float py-2.5 pl-5 pr-2.5 flex items-center justify-between max-w-md mx-auto border border-outline-variant/30">
           <div>
-            <p className="text-lg font-extrabold text-on-surface">
+            <p className="text-lg font-semibold font-headline leading-none">
               {currency.format(listing.basePrice)}{" "}
-              <span className="text-sm font-normal text-on-surface-variant">
+              <span className="text-xs font-normal text-on-surface-variant">
                 / night
               </span>
             </p>
             <button
               type="button"
               onClick={() => setModalOpen(true)}
-              className="text-xs text-primary font-bold underline cursor-pointer"
+              className="text-xs text-primary font-semibold mt-1"
             >
-              {shortDate(checkIn)} - {shortDate(checkOut)}
+              {shortDate(checkIn)} – {shortDate(checkOut)} · {guests} guest
+              {guests === 1 ? "" : "s"}
             </button>
           </div>
           <button
             type="button"
             onClick={() => setModalOpen(true)}
-            className="bg-primary text-white px-8 py-3 rounded-full font-bold hover:opacity-90 transition-opacity shadow-lg shadow-primary/20"
+            className="bg-primary text-on-primary px-6 py-3 rounded-full font-bold press shadow-glow-primary"
           >
-            Book Now
+            Reserve
           </button>
         </div>
       </div>
 
-      {/* Booking modal sheet */}
-      {modalOpen && (
-        <div className="fixed inset-0 z-[60] overflow-hidden">
-          <div
-            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-            onClick={() => setModalOpen(false)}
-          ></div>
-          <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-lg shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="px-6 py-4 border-b border-surface-container flex items-center justify-between sticky top-0 bg-white z-10">
-              <h3 className="text-xl font-bold font-headline">
-                Reserve your stay
-              </h3>
-              <button
-                onClick={() => setModalOpen(false)}
-                className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container transition-colors"
-              >
-                <span className="material-symbols-outlined">close</span>
-              </button>
-            </div>
-            <div className="p-6 space-y-8">
-              <div className="space-y-4">
-                <label className="text-sm font-bold text-on-surface-variant uppercase tracking-wider font-label">
-                  Select Dates
-                </label>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-4 bg-surface-container-low rounded-lg border border-transparent focus-within:border-primary transition-all">
-                    <p className="text-[10px] font-bold text-primary uppercase mb-1">
-                      Check-in
-                    </p>
-                    <input
-                      type="date"
-                      value={checkIn}
-                      onChange={(e) => setCheckIn(e.target.value)}
-                      className="w-full bg-transparent border-none p-0 text-on-surface font-bold focus:ring-0"
-                    />
-                  </div>
-                  <div className="p-4 bg-surface-container-low rounded-lg border border-transparent focus-within:border-primary transition-all">
-                    <p className="text-[10px] font-bold text-primary uppercase mb-1">
-                      Check-out
-                    </p>
-                    <input
-                      type="date"
-                      value={checkOut}
-                      onChange={(e) => setCheckOut(e.target.value)}
-                      className="w-full bg-transparent border-none p-0 text-on-surface font-bold focus:ring-0"
-                    />
-                  </div>
-                </div>
-              </div>
-              <div className="space-y-4">
-                <label className="text-sm font-bold text-on-surface-variant uppercase tracking-wider font-label">
-                  Guests
-                </label>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between p-4 bg-surface-container-low rounded-lg">
-                    <div>
-                      <p className="font-bold text-on-surface">Adults</p>
-                      <p className="text-xs text-on-surface-variant">
-                        Ages 13 or above
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <button
-                        onClick={() => setAdults((v) => Math.max(1, v - 1))}
-                        className="w-8 h-8 rounded-full border border-outline flex items-center justify-center hover:bg-white"
-                      >
-                        <span className="material-symbols-outlined text-sm">
-                          remove
-                        </span>
-                      </button>
-                      <span className="w-4 text-center font-bold">
-                        {adults}
-                      </span>
-                      <button
-                        onClick={() => setAdults((v) => v + 1)}
-                        className="w-8 h-8 rounded-full border border-outline flex items-center justify-center hover:bg-white"
-                      >
-                        <span className="material-symbols-outlined text-sm">
-                          add
-                        </span>
-                      </button>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between p-4 bg-surface-container-low rounded-lg">
-                    <div>
-                      <p className="font-bold text-on-surface">Children</p>
-                      <p className="text-xs text-on-surface-variant">
-                        Ages 2 – 12
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <button
-                        onClick={() => setChildren((v) => Math.max(0, v - 1))}
-                        className="w-8 h-8 rounded-full border border-outline flex items-center justify-center hover:bg-white"
-                      >
-                        <span className="material-symbols-outlined text-sm">
-                          remove
-                        </span>
-                      </button>
-                      <span className="w-4 text-center font-bold">
-                        {children}
-                      </span>
-                      <button
-                        onClick={() => setChildren((v) => v + 1)}
-                        className="w-8 h-8 rounded-full border border-outline flex items-center justify-center hover:bg-white"
-                      >
-                        <span className="material-symbols-outlined text-sm">
-                          add
-                        </span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="pt-4 border-t border-surface-container space-y-3">
-                <div className="flex justify-between text-on-surface-variant">
-                  <span>
-                    {currency.format(listing.basePrice)} ×{" "}
-                    {pricing?.nights ?? 1} nights
-                  </span>
-                  <span>
-                    {currency.format(pricing?.subtotal ?? listing.basePrice)}
-                  </span>
-                </div>
-                <div className="flex justify-between text-on-surface-variant">
-                  <span>Service fee</span>
-                  <span>{currency.format(pricing?.guestServiceFee ?? 0)}</span>
-                </div>
-                <div className="flex justify-between font-bold text-on-surface pt-3 border-t border-surface-container-low text-lg">
-                  <span>Total</span>
-                  <span>
-                    {currency.format(
-                      pricing?.totalAmount ?? listing.basePrice
-                    )}
-                  </span>
-                </div>
-              </div>
-              <Link
-                href={bookHref}
-                className="block text-center w-full bg-primary text-white py-5 rounded-full font-bold text-lg hover:opacity-90 transition-opacity shadow-lg shadow-primary/20"
-              >
-                Confirm Selection
-              </Link>
-              <p className="text-center text-xs text-on-surface-variant font-medium">
-                You won&apos;t be charged yet
-              </p>
-            </div>
-          </div>
+      <BottomSheet
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title="Your stay"
+      >
+        <div className="space-y-5">
+          <DateGuestFields
+            checkIn={checkIn}
+            checkOut={checkOut}
+            adults={adults}
+            children={children}
+            today={today}
+            onCheckIn={setCheckIn}
+            onCheckOut={setCheckOut}
+            onAdults={setAdults}
+            onChildren={setChildren}
+            maxGuests={listing.maxGuests}
+          />
+          <PriceSummary
+            basePrice={listing.basePrice}
+            cleaningFee={listing.cleaningFee}
+            pricing={pricing}
+          />
+          {datesError && (
+            <p role="alert" className="text-sm text-error font-medium">
+              {datesError}
+            </p>
+          )}
+          <Link
+            href={bookHref}
+            onClick={(e) => {
+              if (datesError) {
+                e.preventDefault();
+                toast.error(datesError);
+                return;
+              }
+              if (!isAuthenticated) {
+                e.preventDefault();
+                router.push(`/login?next=${encodeURIComponent(bookHref)}`);
+                return;
+              }
+              setModalOpen(false);
+            }}
+            className={`block text-center w-full py-4 rounded-full font-bold text-base press ${
+              datesError
+                ? "bg-surface-container-high text-on-surface-variant pointer-events-none"
+                : "bg-primary text-on-primary shadow-glow-primary hover:brightness-105"
+            }`}
+          >
+            {isAuthenticated ? "Continue" : "Log in to continue"}
+          </Link>
+          <p className="text-center text-xs text-on-surface-variant">
+            You won&apos;t be charged yet
+          </p>
         </div>
-      )}
+      </BottomSheet>
+    </div>
+  );
+}
+
+function DateGuestFields({
+  checkIn,
+  checkOut,
+  adults,
+  children,
+  today,
+  onCheckIn,
+  onCheckOut,
+  onAdults,
+  onChildren,
+  maxGuests,
+}: {
+  checkIn: string;
+  checkOut: string;
+  adults: number;
+  children: number;
+  today: string;
+  onCheckIn: (v: string) => void;
+  onCheckOut: (v: string) => void;
+  onAdults: (n: number) => void;
+  onChildren: (n: number) => void;
+  maxGuests: number;
+}) {
+  return (
+    <>
+      <DateRangePicker
+        checkIn={checkIn}
+        checkOut={checkOut}
+        min={today}
+        onChange={(ci, co) => {
+          onCheckIn(ci);
+          onCheckOut(co);
+        }}
+      />
+      <div className="grid grid-cols-2 gap-3">
+        <label className="block">
+          <span className="text-[10px] uppercase font-bold tracking-wider text-on-surface-variant">
+            Adults
+          </span>
+          <input
+            type="number"
+            min={1}
+            max={maxGuests}
+            value={adults}
+            onChange={(e) =>
+              onAdults(
+                Math.max(1, Math.min(maxGuests, Number(e.target.value) || 1)),
+              )
+            }
+            className="mt-1 w-full rounded-2xl border border-outline-variant/40 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 transition-shadow"
+          />
+        </label>
+        <label className="block">
+          <span className="text-[10px] uppercase font-bold tracking-wider text-on-surface-variant">
+            Children
+          </span>
+          <input
+            type="number"
+            min={0}
+            max={Math.max(0, maxGuests - 1)}
+            value={children}
+            onChange={(e) =>
+              onChildren(Math.max(0, Number(e.target.value) || 0))
+            }
+            className="mt-1 w-full rounded-2xl border border-outline-variant/40 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 transition-shadow"
+          />
+        </label>
+      </div>
+    </>
+  );
+}
+
+function PriceSummary({
+  basePrice,
+  cleaningFee,
+  pricing,
+}: {
+  basePrice: number;
+  cleaningFee: number;
+  pricing: PriceBreakdown | null;
+}) {
+  return (
+    <div className="bg-surface-container p-4 rounded-2xl space-y-2 text-sm">
+      <Row
+        label={
+          pricing
+            ? `${currency.format(basePrice)} × ${pricing.nights} nights`
+            : "Subtotal"
+        }
+        value={pricing ? currency.format(pricing.subtotal) : "—"}
+      />
+      <Row
+        label="Cleaning fee"
+        value={currency.format(pricing?.cleaningFee ?? cleaningFee ?? 0)}
+      />
+      <Row
+        label="Service fee"
+        value={currency.format(pricing?.guestServiceFee ?? 0)}
+      />
+      <div className="border-t border-surface-container-high pt-2 mt-1 flex justify-between font-bold">
+        <span>Total</span>
+        <span>{currency.format(pricing?.totalAmount ?? basePrice)}</span>
+      </div>
+    </div>
+  );
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between text-on-surface-variant">
+      <span>{label}</span>
+      <span className="font-semibold text-on-surface">{value}</span>
     </div>
   );
 }
 
 function PropertyDetailsSkeleton() {
   return (
-    <div className="bg-background text-on-surface">
-      <section className="mt-4 relative">
+    <div className="text-on-surface">
+      <section className="mt-2 sm:mt-4">
         <div className="lg:hidden">
-          <div className="flex overflow-x-auto no-scrollbar px-4 gap-4">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <Skeleton
-                key={i}
-                className="flex-none w-[75vw] aspect-[4/5] rounded-lg"
-              />
-            ))}
-          </div>
+          <Skeleton className="w-full aspect-[4/5] sm:aspect-[16/10] sm:rounded-3xl sm:mx-4" />
         </div>
         <div className="hidden lg:block max-w-7xl mx-auto px-6">
-          <div className="grid grid-cols-4 grid-rows-2 gap-4 h-[448px]">
-            <Skeleton className="col-span-2 row-span-2 rounded-l-lg" />
-            <Skeleton className="" />
-            <Skeleton className="rounded-tr-lg" />
-            <Skeleton className="" />
-            <Skeleton className="rounded-br-lg" />
+          <div className="grid grid-cols-4 grid-rows-2 gap-3 h-[460px] rounded-3xl overflow-hidden">
+            <Skeleton className="col-span-2 row-span-2 rounded-none" />
+            <Skeleton className="rounded-none" />
+            <Skeleton className="rounded-none" />
+            <Skeleton className="rounded-none" />
+            <Skeleton className="rounded-none" />
           </div>
         </div>
       </section>
-
-      <div className="max-w-7xl mx-auto px-6 mt-10 grid grid-cols-1 lg:grid-cols-12 gap-12">
-        <div className="lg:col-span-8 space-y-12">
-          <div className="space-y-4">
-            <div className="flex items-center gap-3">
-              <Skeleton className="h-6 w-32 rounded-full" />
-              <Skeleton className="h-4 w-24" />
-            </div>
-            <Skeleton className="h-10 w-3/4" />
-            <Skeleton className="h-5 w-1/2" />
-          </div>
-          <div className="space-y-4">
-            <Skeleton className="h-6 w-48" />
-            <Skeleton className="h-4 w-full" />
-            <Skeleton className="h-4 w-full" />
-            <Skeleton className="h-4 w-2/3" />
-          </div>
-          <div className="space-y-6">
-            <Skeleton className="h-6 w-48" />
-            <div className="grid grid-cols-2 gap-3">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <Skeleton key={i} className="h-14 rounded-lg" />
-              ))}
-            </div>
-          </div>
-          <div className="bg-surface-container-lowest p-8 rounded-lg shadow-[0_8px_40px_-15px_rgba(0,0,0,0.04)] space-y-6">
-            <Skeleton className="h-5 w-40" />
-            <div className="flex items-center gap-4">
-              <Skeleton className="w-16 h-16 rounded-full" />
-              <div className="space-y-2">
-                <Skeleton className="h-5 w-32" />
-                <Skeleton className="h-3 w-20" />
-              </div>
-            </div>
-            <Skeleton className="h-4 w-full" />
-            <Skeleton className="h-12 w-full rounded-full" />
-          </div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 mt-10 grid grid-cols-1 lg:grid-cols-12 gap-12">
+        <div className="lg:col-span-8 space-y-5">
+          <Skeleton className="h-10 w-3/4 rounded-xl" />
+          <Skeleton className="h-5 w-1/2 rounded-lg" />
+          <Skeleton className="h-24 w-full rounded-2xl" />
+          <Skeleton className="h-4 w-full rounded-md" />
+          <Skeleton className="h-4 w-2/3 rounded-md" />
         </div>
-        <div className="lg:col-span-4 space-y-8">
-          <div className="hidden lg:block bg-surface-container-lowest p-8 rounded-lg shadow-[0_8px_40px_-15px_rgba(0,0,0,0.04)] space-y-6">
-            <Skeleton className="h-5 w-40" />
-            <div className="grid grid-cols-2 gap-4">
-              <Skeleton className="h-16 rounded-2xl" />
-              <Skeleton className="h-16 rounded-2xl" />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <Skeleton className="h-16 rounded-2xl" />
-              <Skeleton className="h-16 rounded-2xl" />
-            </div>
-            <Skeleton className="h-28 rounded-3xl" />
-            <Skeleton className="h-12 w-full rounded-full" />
-          </div>
-          <div className="space-y-4">
-            <Skeleton className="h-6 w-32" />
-            <Skeleton className="h-64 w-full rounded-lg" />
-          </div>
+        <div className="lg:col-span-4">
+          <Skeleton className="h-96 w-full rounded-3xl" />
         </div>
       </div>
     </div>
