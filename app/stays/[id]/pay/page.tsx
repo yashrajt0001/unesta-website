@@ -8,6 +8,7 @@ import {
   bookingsApi,
   fetchListingDetails,
   fetchPriceBreakdown,
+  paymentsApi,
   type ListingDetails,
   type PriceBreakdown,
 } from "@/lib/api";
@@ -27,6 +28,38 @@ const shortDate = (d: string) =>
 
 function isValidEmail(s: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim());
+}
+
+// ─── Razorpay checkout ─────────────────────────────────────────────────────────
+
+type RazorpaySuccess = {
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
+};
+
+type RazorpayInstance = {
+  open: () => void;
+  on: (event: string, cb: (resp: { error?: { description?: string } }) => void) => void;
+};
+
+declare global {
+  interface Window {
+    Razorpay: new (options: Record<string, unknown>) => RazorpayInstance;
+  }
+}
+
+// Inject the Razorpay checkout script once; resolves false if it fails to load.
+function loadRazorpayScript(): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (typeof window === "undefined") return resolve(false);
+    if (window.Razorpay) return resolve(true);
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
 }
 
 export default function PaymentPage() {
@@ -61,6 +94,9 @@ function PaymentInner() {
   const [specialRequests, setSpecialRequests] = useState("");
   const [errors, setErrors] = useState<{ [k: string]: string }>({});
   const [submitting, setSubmitting] = useState(false);
+  // Booking is created once; reused if the user dismisses checkout and retries,
+  // so we don't 409 against their own pending booking holding these dates.
+  const [bookingId, setBookingId] = useState<string | null>(null);
 
   const paramsValid =
     !!checkIn && !!checkOut && guests > 0 && new Date(checkOut) > new Date(checkIn);
@@ -113,24 +149,76 @@ function PaymentInner() {
     setErrors({});
     setSubmitting(true);
     try {
-      const booking = await bookingsApi.create({
-        listingId: id,
-        checkInDate: checkIn,
-        checkOutDate: checkOut,
-        numGuests: guests,
-        specialRequests: specialRequests.trim() || undefined,
+      // 1. Create the booking — starts PENDING, confirmed only once payment is
+      //    captured. Reuse it on retry so we don't conflict with our own hold.
+      let activeBookingId = bookingId;
+      if (!activeBookingId) {
+        const booking = await bookingsApi.create({
+          listingId: id,
+          checkInDate: checkIn,
+          checkOutDate: checkOut,
+          numGuests: guests,
+          specialRequests: specialRequests.trim() || undefined,
+        });
+        activeBookingId = booking.id;
+        setBookingId(activeBookingId);
+      }
+
+      // 2. Create a Razorpay order for that booking (idempotent on the backend).
+      const order = await paymentsApi.createOrder(activeBookingId);
+
+      // 3. Make sure the Razorpay checkout script is loaded.
+      const scriptReady = await loadRazorpayScript();
+      if (!scriptReady) {
+        toast.error("Couldn't load the payment gateway. Please try again.");
+        setSubmitting(false);
+        return;
+      }
+
+      // 4. Open checkout. Booking is confirmed in the success handler after verify.
+      const rzp = new window.Razorpay({
+        key: order.keyId,
+        amount: order.amount,
+        currency: order.currency,
+        name: "UNesta",
+        description: order.listingTitle,
+        order_id: order.orderId,
+        prefill: { name: fullName, email, contact: phone },
+        theme: { color: "#1d6fb8" },
+        handler: async (resp: RazorpaySuccess) => {
+          try {
+            await paymentsApi.verify({
+              razorpayOrderId: resp.razorpay_order_id,
+              razorpayPaymentId: resp.razorpay_payment_id,
+              razorpaySignature: resp.razorpay_signature,
+            });
+            toast.success("Payment successful — your booking is confirmed!");
+            router.push("/trips");
+          } catch (err) {
+            toast.error(
+              err instanceof ApiError
+                ? err.message
+                : "Payment went through but confirmation failed. Contact support.",
+            );
+            setSubmitting(false);
+          }
+        },
+        modal: {
+          ondismiss: () => {
+            toast.error("Payment cancelled. Your booking is on hold until you pay.");
+            setSubmitting(false);
+          },
+        },
       });
-      toast.success(
-        booking.status === "CONFIRMED"
-          ? "Booking confirmed!"
-          : "Booking submitted. Awaiting host approval.",
-      );
-      router.push("/trips");
+      rzp.on("payment.failed", (resp) => {
+        toast.error(resp?.error?.description || "Payment failed. Please try again.");
+        setSubmitting(false);
+      });
+      rzp.open();
     } catch (err) {
       toast.error(
-        err instanceof ApiError ? err.message : "Could not create booking.",
+        err instanceof ApiError ? err.message : "Could not start payment.",
       );
-    } finally {
       setSubmitting(false);
     }
   }
@@ -312,13 +400,13 @@ function PaymentInner() {
             disabled={submitting}
             className="w-full py-4 bg-primary text-on-primary font-bold text-base rounded-full shadow-glow-primary press hover:brightness-105 disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            {submitting ? "Submitting…" : "Confirm booking"}
+            {submitting ? "Processing…" : "Pay & confirm booking"}
           </button>
           <p className="text-center text-xs text-on-surface-variant mt-3 leading-relaxed">
-            Payment gateway integration is pending — your booking will be created
-            with PENDING status and you can pay when contacted by your host.
+            You&apos;ll be redirected to our secure payment gateway. Your booking
+            is confirmed only after payment succeeds.
             <br />
-            By confirming, you agree to UNesta&apos;s{" "}
+            By paying, you agree to UNesta&apos;s{" "}
             <a className="underline text-primary" href="#">
               Terms of Service
             </a>{" "}

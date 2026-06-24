@@ -152,6 +152,15 @@ export type Booking = {
   };
 };
 
+export type PaymentOrder = {
+  orderId: string;
+  amount: number; // in paise
+  currency: string;
+  keyId: string;
+  bookingId: string;
+  listingTitle: string;
+};
+
 export type Wishlist = {
   id: string;
   name: string;
@@ -298,6 +307,30 @@ export const bookingsApi = {
       method: "PATCH",
       auth: true,
       body: JSON.stringify({ reason }),
+    }),
+};
+
+// ─── Payments ────────────────────────────────────────────────────────────────
+
+export const paymentsApi = {
+  // Create a Razorpay order for a booking. Frontend opens checkout with the result.
+  createOrder: (bookingId: string) =>
+    request<PaymentOrder>(`/api/payments/create-order`, {
+      method: "POST",
+      auth: true,
+      body: JSON.stringify({ bookingId }),
+    }),
+
+  // Confirm the payment after Razorpay checkout succeeds. Confirms the booking.
+  verify: (payload: {
+    razorpayOrderId: string;
+    razorpayPaymentId: string;
+    razorpaySignature: string;
+  }) =>
+    request<{ id: string; status: string }>(`/api/payments/verify`, {
+      method: "POST",
+      auth: true,
+      body: JSON.stringify(payload),
     }),
 };
 
