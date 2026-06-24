@@ -29,7 +29,9 @@ export function BottomSheet({
   const sheetRef = useRef<HTMLDivElement | null>(null);
   const closeBtnRef = useRef<HTMLButtonElement | null>(null);
   const dragStart = useRef<number | null>(null);
+  const dragYRef = useRef(0);
   const [dragY, setDragY] = useState(0);
+  const [dragging, setDragging] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -44,6 +46,8 @@ export function BottomSheet({
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = prev;
       setDragY(0);
+      setDragging(false);
+      dragYRef.current = 0;
       dragStart.current = null;
     };
   }, [open, onClose]);
@@ -51,30 +55,28 @@ export function BottomSheet({
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     // Only start a drag on the grab area (handle / header), not the body.
     dragStart.current = e.clientY;
+    setDragging(true);
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   }, []);
 
   const onPointerMove = useCallback((e: React.PointerEvent) => {
     if (dragStart.current === null) return;
-    const delta = e.clientY - dragStart.current;
-    setDragY(Math.max(0, delta));
+    const delta = Math.max(0, e.clientY - dragStart.current);
+    dragYRef.current = delta;
+    setDragY(delta);
   }, []);
 
   const onPointerUp = useCallback(() => {
     if (dragStart.current === null) return;
     dragStart.current = null;
-    setDragY((d) => {
-      if (d > 130) {
-        onClose();
-        return 0;
-      }
-      return 0;
-    });
+    const shouldClose = dragYRef.current > 130;
+    dragYRef.current = 0;
+    setDragY(0);
+    setDragging(false);
+    if (shouldClose) onClose();
   }, [onClose]);
 
   if (!open) return null;
-
-  const dragging = dragStart.current !== null;
 
   return (
     <div

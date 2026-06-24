@@ -69,12 +69,15 @@ export function DateRangePicker({
   checkIn,
   checkOut,
   min,
+  unavailableDates,
   onChange,
 }: {
   checkIn: string;
   checkOut: string;
   /** Earliest selectable date as YYYY-MM-DD. */
   min: string;
+  /** Nights (YYYY-MM-DD) that can't be booked — host-blocked or already booked. */
+  unavailableDates?: Set<string>;
   onChange: (checkIn: string, checkOut: string) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -115,16 +118,27 @@ export function DateRangePicker({
     };
   }, [open]);
 
+  const isBlocked = (d: Date) => unavailableDates?.has(toIso(d)) ?? false;
+
+  // Any blocked night in [start, endExclusive) — used to reject ranges that
+  // would span an unavailable date. (start is check-in, already known free.)
+  function hasBlockedBetween(start: Date, endExclusive: Date) {
+    for (let d = addDays(start, 1); d < endExclusive; d = addDays(d, 1)) {
+      if (isBlocked(d)) return true;
+    }
+    return false;
+  }
+
   function selectDay(day: Date) {
-    if (day < minDate) return;
+    if (day < minDate || isBlocked(day)) return;
     if (active === "in") {
-      // Start a fresh range; push check-out to the next day if it'd collapse.
-      const nextOut = outDate > day ? outDate : addDays(day, 1);
-      onChange(toIso(day), toIso(nextOut));
+      // Fresh range: a single night (check-in → next morning) is always valid.
+      onChange(toIso(day), toIso(addDays(day, 1)));
       setActive("out");
     } else {
-      if (day <= inDate) {
-        // Tapping on/before check-in restarts the range from here.
+      if (day <= inDate || hasBlockedBetween(inDate, day)) {
+        // Tapping before check-in, or a range that crosses a blocked night,
+        // restarts the range from this day.
         onChange(toIso(day), toIso(addDays(day, 1)));
         setActive("out");
       } else {
@@ -234,7 +248,8 @@ export function DateRangePicker({
           <div className="grid grid-cols-7 gap-y-1">
             {cells.map((day, i) => {
               if (!day) return <span key={i} />;
-              const disabled = day < minDate;
+              const blocked = isBlocked(day);
+              const disabled = day < minDate || blocked;
               const isIn = sameDay(day, inDate);
               const isOut = sameDay(day, outDate);
               const inRange = day > inDate && day < outDate;
@@ -269,6 +284,7 @@ export function DateRangePicker({
                       disabled
                         ? "text-on-surface-variant/30 pointer-events-none"
                         : "hover:bg-surface-container",
+                      blocked ? "line-through" : "",
                       isEdge
                         ? "bg-primary text-on-primary font-bold shadow-glow-primary hover:bg-primary"
                         : "",

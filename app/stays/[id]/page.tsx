@@ -7,6 +7,7 @@ import {
   ApiError,
   fetchListingDetails,
   fetchPriceBreakdown,
+  fetchUnavailableDates,
   type ListingDetails,
   type PriceBreakdown,
 } from "@/lib/api";
@@ -17,7 +18,9 @@ import { WishlistHeart } from "@/components/ui/WishlistHeart";
 import { ImageCarousel } from "@/components/ui/ImageCarousel";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { DateRangePicker } from "@/components/ui/DateRangePicker";
-import { Reveal } from "@/components/ui/Reveal";
+import { Lightbox } from "@/components/ui/Lightbox";
+import { SectionNav } from "@/components/ui/SectionNav";
+import { FadeIn, Stagger, StaggerItem, Magnetic } from "@/components/ui/motion";
 
 const currency = new Intl.NumberFormat("en-IN", {
   style: "currency",
@@ -38,6 +41,53 @@ function addDaysIso(base: string, days: number) {
   return d.toISOString().slice(0, 10);
 }
 
+function isoOf(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// Default range: earliest available date from tomorrow, then the run of
+// consecutive available dates (up to `maxDates`). check-out is the LAST
+// available date in the run — a blocked date is never an endpoint or inside.
+// Examples (block 10): [8,9] -> 8→9.  8-10 blocked, 11,12,13 free -> 11→13.
+// 11 free, 12 blocked -> 11→11 (single day).
+function firstAvailableRange(blocked: Set<string>, fromIso: string, maxDates = 3) {
+  const [y, m, d] = fromIso.split("-").map(Number);
+  const start = new Date(y, m - 1, d);
+  start.setDate(start.getDate() + 1); // earliest = tomorrow
+  for (let i = 0; i < 400 && blocked.has(isoOf(start)); i++) {
+    start.setDate(start.getDate() + 1);
+  }
+  const last = new Date(start);
+  let count = 1;
+  while (count < maxDates) {
+    const next = new Date(last);
+    next.setDate(next.getDate() + 1);
+    if (blocked.has(isoOf(next))) break;
+    last.setTime(next.getTime());
+    count++;
+  }
+  return { checkIn: isoOf(start), checkOut: isoOf(last) };
+}
+
+// True if any night in [checkIn, checkOut) is in the blocked set (local-date safe).
+function rangeHasBlocked(
+  checkIn: string,
+  checkOut: string,
+  blocked: Set<string>,
+) {
+  if (blocked.size === 0) return false;
+  const [y, m, d] = checkIn.split("-").map(Number);
+  const [ey, em, ed] = checkOut.split("-").map(Number);
+  const cur = new Date(y, m - 1, d);
+  const end = new Date(ey, em - 1, ed);
+  while (cur < end) {
+    const iso = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}-${String(cur.getDate()).padStart(2, "0")}`;
+    if (blocked.has(iso)) return true;
+    cur.setDate(cur.getDate() + 1);
+  }
+  return false;
+}
+
 export default function PropertyDetailsPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
@@ -55,7 +105,10 @@ export default function PropertyDetailsPage() {
   const [adults, setAdults] = useState(2);
   const [children, setChildren] = useState(0);
   const [modalOpen, setModalOpen] = useState(false);
-  const [datesError, setDatesError] = useState<string | null>(null);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [unavailableDates, setUnavailableDates] = useState<Set<string>>(
+    () => new Set(),
+  );
 
   const guests = adults + children;
 
@@ -63,7 +116,10 @@ export default function PropertyDetailsPage() {
     let cancelled = false;
     fetchListingDetails(id)
       .then((d) => {
-        if (!cancelled) setListing(d);
+        if (cancelled) return;
+        setListing(d);
+        // Default adults must fit the property's capacity.
+        setAdults((a) => Math.min(a, d.maxGuests));
       })
       .catch((e: unknown) => {
         if (!cancelled)
@@ -76,16 +132,39 @@ export default function PropertyDetailsPage() {
     };
   }, [id]);
 
-  // Clamp dates and validate
+  // Load unavailable dates (host-blocked + booked) for the next 12 months.
   useEffect(() => {
-    if (new Date(checkOut) <= new Date(checkIn)) {
-      setDatesError("Check-out must be after check-in.");
-    } else if (listing && guests > listing.maxGuests) {
-      setDatesError(`This stay allows up to ${listing.maxGuests} guests.`);
-    } else {
-      setDatesError(null);
-    }
-  }, [checkIn, checkOut, guests, listing]);
+    let cancelled = false;
+    const from = todayIso();
+    const to = addDaysIso(from, 365);
+    fetchUnavailableDates(id, from, to)
+      .then((dates) => {
+        if (cancelled) return;
+        const set = new Set(dates);
+        setUnavailableDates(set);
+        // Seed defaults with the first actually-bookable range.
+        const r = firstAvailableRange(set, todayIso(), 3);
+        setCheckIn(r.checkIn);
+        setCheckOut(r.checkOut);
+      })
+      .catch(() => {
+        /* non-fatal — calendar still blocks past dates */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  // Derived validation message for the chosen dates/guests.
+  const datesError = useMemo<string | null>(() => {
+    if (new Date(checkOut) <= new Date(checkIn))
+      return "Check-out must be after check-in.";
+    if (listing && guests > listing.maxGuests)
+      return `This stay allows up to ${listing.maxGuests} guests.`;
+    if (rangeHasBlocked(checkIn, checkOut, unavailableDates))
+      return "Some of your selected dates are unavailable.";
+    return null;
+  }, [checkIn, checkOut, guests, listing, unavailableDates]);
 
   // Fetch price breakdown (only when inputs are valid)
   useEffect(() => {
@@ -163,40 +242,88 @@ export default function PropertyDetailsPage() {
           <div className="absolute top-4 right-4 sm:right-8 z-10">
             <WishlistHeart listingId={listing.id} />
           </div>
+          <button
+            type="button"
+            onClick={() => setLightboxIndex(0)}
+            className="absolute bottom-4 right-4 sm:right-8 z-10 inline-flex items-center gap-1.5 glass text-on-surface text-xs font-semibold px-3 py-2 rounded-full shadow-soft press"
+          >
+            <span className="material-symbols-outlined text-[16px]">
+              grid_view
+            </span>
+            All photos
+          </button>
         </div>
 
         {/* Desktop gallery */}
         <div className="hidden lg:block max-w-7xl mx-auto px-6 relative">
           <div className="grid grid-cols-4 grid-rows-2 gap-3 h-[460px] rounded-3xl overflow-hidden">
-            <div className="col-span-2 row-span-2 relative overflow-hidden group">
+            <button
+              type="button"
+              onClick={() => setLightboxIndex(0)}
+              aria-label="Open photo viewer"
+              className="col-span-2 row-span-2 relative overflow-hidden group cursor-zoom-in"
+            >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={grid[0]?.url || cover}
                 alt={listing.title}
                 className="w-full h-full object-cover group-hover:scale-105 transition duration-700"
               />
-            </div>
+              <span className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+            </button>
             {[1, 2, 3, 4].map((idx) => (
-              <div key={idx} className="relative overflow-hidden group">
+              <button
+                type="button"
+                key={idx}
+                onClick={() => setLightboxIndex(Math.min(idx, listing.images.length - 1))}
+                aria-label="Open photo viewer"
+                className="relative overflow-hidden group cursor-zoom-in"
+              >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={grid[idx]?.url || cover}
                   alt={listing.title}
                   className="w-full h-full object-cover group-hover:scale-105 transition duration-700"
                 />
-              </div>
+                <span className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+              </button>
             ))}
           </div>
           <div className="absolute top-4 right-10">
             <WishlistHeart listingId={listing.id} />
           </div>
+          <button
+            type="button"
+            onClick={() => setLightboxIndex(0)}
+            className="absolute bottom-4 right-10 inline-flex items-center gap-1.5 bg-surface-container-lowest text-on-surface text-sm font-semibold px-4 py-2 rounded-full shadow-lift press hover:shadow-float"
+          >
+            <span className="material-symbols-outlined text-[18px]">
+              grid_view
+            </span>
+            Show all {listing.images.length} photos
+          </button>
         </div>
       </section>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 mt-6">
+        <SectionNav
+          sections={[
+            { id: "overview", label: "Overview" },
+            ...(listing.amenities.length
+              ? [{ id: "amenities", label: "Amenities" }]
+              : []),
+            { id: "host", label: "Host" },
+            ...(listing.houseRules.length
+              ? [{ id: "rules", label: "House rules" }]
+              : []),
+          ]}
+        />
+      </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 mt-8 lg:mt-10 grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12">
         {/* Left column */}
         <div className="lg:col-span-8 space-y-10">
-          <Reveal className="space-y-4">
+          <FadeIn id="overview" className="space-y-4 scroll-mt-28">
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-1 text-on-accent-container bg-accent-container rounded-full px-2.5 py-1 text-xs font-bold">
                 <span
@@ -219,19 +346,19 @@ export default function PropertyDetailsPage() {
                 {listing.city}, {listing.state}
               </span>
             </div>
-          </Reveal>
+          </FadeIn>
 
           {/* Quick facts */}
-          <Reveal className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <Stagger className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
               { icon: "king_bed", label: "Bedrooms", value: listing.bedrooms },
               { icon: "bed", label: "Beds", value: listing.beds },
               { icon: "bathtub", label: "Baths", value: listing.bathrooms },
               { icon: "group", label: "Guests", value: listing.maxGuests },
             ].map((f) => (
-              <div
+              <StaggerItem
                 key={f.label}
-                className="flex flex-col gap-1 p-4 bg-surface-container-low rounded-2xl"
+                className="flex flex-col gap-1 p-4 bg-surface-container-low rounded-2xl hover-lift"
               >
                 <span className="material-symbols-outlined text-primary text-[22px]">
                   {f.icon}
@@ -242,27 +369,29 @@ export default function PropertyDetailsPage() {
                 <span className="text-xs text-on-surface-variant">
                   {f.label}
                 </span>
-              </div>
+              </StaggerItem>
             ))}
-          </Reveal>
+          </Stagger>
 
-          <Reveal className="space-y-3">
+          <FadeIn className="space-y-3">
             <h3 className="text-xl font-semibold font-headline">
               About this stay
             </h3>
             <p className="text-base leading-relaxed text-on-surface-variant whitespace-pre-line">
               {listing.description}
             </p>
-          </Reveal>
+          </FadeIn>
 
           {listing.amenities.length > 0 && (
-            <Reveal className="space-y-5">
-              <h3 className="text-xl font-semibold font-headline">
-                What this place offers
-              </h3>
-              <div className="grid grid-cols-2 gap-3">
+            <div id="amenities" className="space-y-5 scroll-mt-28">
+              <FadeIn>
+                <h3 className="text-xl font-semibold font-headline">
+                  What this place offers
+                </h3>
+              </FadeIn>
+              <Stagger className="grid grid-cols-2 gap-3" amount={0.1}>
                 {listing.amenities.slice(0, 6).map((a) => (
-                  <div
+                  <StaggerItem
                     key={a.amenity.id}
                     className="flex items-center gap-3 p-3.5 bg-surface-container-low rounded-2xl hover:bg-surface-container transition-colors"
                   >
@@ -270,20 +399,20 @@ export default function PropertyDetailsPage() {
                       {a.amenity.icon || "check_circle"}
                     </span>
                     <span className="text-sm font-medium">{a.amenity.name}</span>
-                  </div>
+                  </StaggerItem>
                 ))}
-              </div>
+              </Stagger>
               {listing.amenities.length > 6 && (
                 <p className="text-sm text-on-surface-variant">
                   + {listing.amenities.length - 6} more
                 </p>
               )}
-            </Reveal>
+            </div>
           )}
 
-          <Reveal
-            as="div"
-            className="bg-surface-container-lowest p-6 sm:p-8 rounded-3xl shadow-soft space-y-5"
+          <FadeIn
+            id="host"
+            className="bg-surface-container-lowest p-6 sm:p-8 rounded-3xl shadow-soft space-y-5 scroll-mt-28 hover-lift hover:shadow-lift"
           >
             <h3 className="text-lg font-semibold font-headline border-b border-surface-container pb-3">
               Your host
@@ -308,10 +437,10 @@ export default function PropertyDetailsPage() {
                 </p>
               </div>
             </div>
-          </Reveal>
+          </FadeIn>
 
           {listing.houseRules.length > 0 && (
-            <Reveal className="space-y-4">
+            <FadeIn id="rules" className="space-y-4 scroll-mt-28">
               <h3 className="text-xl font-semibold font-headline">
                 House rules
               </h3>
@@ -325,7 +454,7 @@ export default function PropertyDetailsPage() {
                   </li>
                 ))}
               </ul>
-            </Reveal>
+            </FadeIn>
           )}
         </div>
 
@@ -344,6 +473,7 @@ export default function PropertyDetailsPage() {
               adults={adults}
               children={children}
               today={today}
+              unavailableDates={unavailableDates}
               onCheckIn={setCheckIn}
               onCheckOut={setCheckOut}
               onAdults={setAdults}
@@ -360,18 +490,20 @@ export default function PropertyDetailsPage() {
                 {datesError}
               </p>
             )}
-            <Link
-              href={bookHref}
-              onClick={handleBookClick}
-              aria-disabled={!!datesError}
-              className={`block text-center w-full py-4 rounded-full font-bold text-sm press ${
-                datesError
-                  ? "bg-surface-container-high text-on-surface-variant pointer-events-none"
-                  : "bg-primary text-on-primary shadow-glow-primary hover:brightness-105"
-              }`}
-            >
-              {isAuthenticated ? "Reserve" : "Log in to reserve"}
-            </Link>
+            <Magnetic strength={datesError ? 0 : 0.25} className="block">
+              <Link
+                href={bookHref}
+                onClick={handleBookClick}
+                aria-disabled={!!datesError}
+                className={`block text-center w-full py-4 rounded-full font-bold text-sm press ${
+                  datesError
+                    ? "bg-surface-container-high text-on-surface-variant pointer-events-none"
+                    : "bg-primary text-on-primary shadow-glow-primary hover:brightness-105"
+                }`}
+              >
+                {isAuthenticated ? "Reserve" : "Log in to reserve"}
+              </Link>
+            </Magnetic>
             <p className="text-xs text-on-surface-variant text-center">
               You won&apos;t be charged yet.
             </p>
@@ -420,6 +552,7 @@ export default function PropertyDetailsPage() {
             adults={adults}
             children={children}
             today={today}
+            unavailableDates={unavailableDates}
             onCheckIn={setCheckIn}
             onCheckOut={setCheckOut}
             onAdults={setAdults}
@@ -464,6 +597,14 @@ export default function PropertyDetailsPage() {
           </p>
         </div>
       </BottomSheet>
+
+      <Lightbox
+        images={listing.images.length ? listing.images : [{ url: cover }]}
+        index={lightboxIndex}
+        alt={listing.title}
+        onClose={() => setLightboxIndex(null)}
+        onIndex={setLightboxIndex}
+      />
     </div>
   );
 }
@@ -474,6 +615,7 @@ function DateGuestFields({
   adults,
   children,
   today,
+  unavailableDates,
   onCheckIn,
   onCheckOut,
   onAdults,
@@ -485,6 +627,7 @@ function DateGuestFields({
   adults: number;
   children: number;
   today: string;
+  unavailableDates: Set<string>;
   onCheckIn: (v: string) => void;
   onCheckOut: (v: string) => void;
   onAdults: (n: number) => void;
@@ -497,6 +640,7 @@ function DateGuestFields({
         checkIn={checkIn}
         checkOut={checkOut}
         min={today}
+        unavailableDates={unavailableDates}
         onChange={(ci, co) => {
           onCheckIn(ci);
           onCheckOut(co);

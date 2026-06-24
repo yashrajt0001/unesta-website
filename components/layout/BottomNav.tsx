@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { motion } from "motion/react";
 import { useAuth } from "@/lib/auth-context";
 
 type NavItem = {
@@ -32,12 +33,20 @@ function NavButton({
     <Link
       href={href}
       aria-current={isActive ? "page" : undefined}
-      className={`group flex flex-col items-center justify-center px-3 py-1.5 rounded-full min-w-[60px] transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] active:scale-90 ${
-        isActive ? "active-nav-pill" : "text-on-surface-variant hover:text-on-surface"
+      className={`group relative flex flex-col items-center justify-center px-3 py-1.5 rounded-full min-w-[60px] active:scale-90 transition-transform duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${
+        isActive ? "text-white" : "text-on-surface-variant hover:text-on-surface"
       }`}
     >
+      {/* Shared sliding indicator — animates between active items */}
+      {isActive && (
+        <motion.span
+          layoutId="bottomNavPill"
+          className="absolute inset-0 active-nav-pill"
+          transition={{ type: "spring", stiffness: 420, damping: 34 }}
+        />
+      )}
       <span
-        className={`material-symbols-outlined text-[22px] transition-transform duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${
+        className={`relative material-symbols-outlined text-[22px] transition-transform duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${
           isActive ? "-translate-y-0.5" : "group-active:scale-110"
         }`}
         style={
@@ -48,7 +57,7 @@ function NavButton({
       >
         {icon}
       </span>
-      <span className="text-[10px] font-semibold mt-0.5">{label}</span>
+      <span className="relative text-[10px] font-semibold mt-0.5">{label}</span>
     </Link>
   );
 }

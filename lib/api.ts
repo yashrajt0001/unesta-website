@@ -188,8 +188,25 @@ export async function fetchPublishedListings(params?: {
   return request<ListingCard[]>(`/api/search/listings?${qp.toString()}`);
 }
 
+export type SearchSuggestion = {
+  type: "city" | "state" | "country";
+  label: string;
+  value: string;
+};
+
+export async function fetchSearchSuggestions(q: string) {
+  const qp = new URLSearchParams({ q });
+  return request<SearchSuggestion[]>(`/api/search/suggestions?${qp.toString()}`);
+}
+
 export async function fetchListingDetails(id: string) {
   return request<ListingDetails>(`/api/listings/${id}`);
+}
+
+/** Dates (YYYY-MM-DD) that cannot be booked: host-blocked + already-booked. */
+export async function fetchUnavailableDates(id: string, from: string, to: string) {
+  const qp = new URLSearchParams({ from, to });
+  return request<string[]>(`/api/listings/${id}/unavailable-dates?${qp.toString()}`);
 }
 
 export async function fetchPriceBreakdown(input: {

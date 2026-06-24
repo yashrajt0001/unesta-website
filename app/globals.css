@@ -129,6 +129,13 @@ body {
   border-radius: 0.5rem;
 }
 
+/* Search bar: the sliding white pill is the focus cue — suppress the brown
+   ring on its inputs, segments and buttons. */
+.search-bar :focus-visible {
+  box-shadow: none;
+  border-radius: 9999px;
+}
+
 /* Honour reduced-motion preferences globally */
 @media (prefers-reduced-motion: reduce) {
   *,

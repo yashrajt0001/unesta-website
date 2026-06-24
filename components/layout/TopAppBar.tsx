@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { motion } from "motion/react";
 import { useAuth } from "@/lib/auth-context";
 
 interface TopAppBarProps {
@@ -48,24 +49,38 @@ export default function TopAppBar({ onMenuClick }: TopAppBarProps) {
         <Link
           href="/"
           aria-current={!isExperiences ? "page" : undefined}
-          className={`py-2 px-5 rounded-full text-sm font-semibold transition-all duration-300 ${
+          className={`relative py-2 px-5 rounded-full text-sm font-semibold transition-colors duration-300 ${
             !isExperiences
-              ? "bg-surface-container-lowest shadow-soft text-primary"
+              ? "text-primary"
               : "text-on-surface-variant hover:text-on-surface"
           }`}
         >
-          Stays
+          {!isExperiences && (
+            <motion.span
+              layoutId="topNavPill"
+              className="absolute inset-0 rounded-full bg-surface-container-lowest shadow-soft"
+              transition={{ type: "spring", stiffness: 420, damping: 34 }}
+            />
+          )}
+          <span className="relative">Stays</span>
         </Link>
         <Link
           href="/experiences"
           aria-current={isExperiences ? "page" : undefined}
-          className={`py-2 px-5 rounded-full text-sm font-semibold transition-all duration-300 ${
+          className={`relative py-2 px-5 rounded-full text-sm font-semibold transition-colors duration-300 ${
             isExperiences
-              ? "bg-surface-container-lowest shadow-soft text-primary"
+              ? "text-primary"
               : "text-on-surface-variant hover:text-on-surface"
           }`}
         >
-          Experiences
+          {isExperiences && (
+            <motion.span
+              layoutId="topNavPill"
+              className="absolute inset-0 rounded-full bg-surface-container-lowest shadow-soft"
+              transition={{ type: "spring", stiffness: 420, damping: 34 }}
+            />
+          )}
+          <span className="relative">Experiences</span>
         </Link>
       </div>
 
