@@ -698,10 +698,14 @@ function PriceSummary({
       <Row
         label={
           pricing
-            ? `${currency.format(basePrice)} × ${pricing.nights} nights`
+            ? `${currency.format(basePrice)} × ${pricing.numNights} nights`
             : "Subtotal"
         }
-        value={pricing ? currency.format(pricing.subtotal) : "—"}
+        value={
+          pricing
+            ? currency.format(pricing.basePricePerNight * pricing.numNights)
+            : "—"
+        }
       />
       <Row
         label="Cleaning fee"
@@ -709,11 +713,11 @@ function PriceSummary({
       />
       <Row
         label="Service fee"
-        value={currency.format(pricing?.guestServiceFee ?? 0)}
+        value={currency.format(pricing?.serviceFee ?? 0)}
       />
       <div className="border-t border-surface-container-high pt-2 mt-1 flex justify-between font-bold">
         <span>Total</span>
-        <span>{currency.format(pricing?.totalAmount ?? basePrice)}</span>
+        <span>{currency.format(pricing?.totalPrice ?? basePrice)}</span>
       </div>
     </div>
   );

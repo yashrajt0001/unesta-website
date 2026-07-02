@@ -196,11 +196,13 @@ function BookInner() {
             <Row
               label={
                 pricing
-                  ? `${currency.format(listing.basePrice)} × ${pricing.nights} nights`
+                  ? `${currency.format(listing.basePrice)} × ${pricing.numNights} nights`
                   : "Subtotal"
               }
               value={
-                pricing ? currency.format(pricing.subtotal) : "—"
+                pricing
+                  ? currency.format(pricing.basePricePerNight * pricing.numNights)
+                  : "—"
               }
             />
             <Row
@@ -209,11 +211,11 @@ function BookInner() {
             />
             <Row
               label="Service fee"
-              value={currency.format(pricing?.guestServiceFee ?? 0)}
+              value={currency.format(pricing?.serviceFee ?? 0)}
             />
             <div className="flex justify-between font-bold pt-2 border-t border-surface-container-low">
               <span>Total</span>
-              <span>{currency.format(pricing?.totalAmount ?? listing.basePrice)}</span>
+              <span>{currency.format(pricing?.totalPrice ?? listing.basePrice)}</span>
             </div>
           </div>
 

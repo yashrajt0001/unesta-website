@@ -30,7 +30,7 @@ export default function TopAppBar({ onMenuClick }: TopAppBarProps) {
 
   return (
     <header
-      className={`sticky top-0 z-40 flex items-center justify-between w-full px-4 sm:px-6 py-3 transition-all duration-300 ${
+      className={`sticky top-0 z-50 flex items-center justify-between w-full px-4 sm:px-6 py-3 transition-all duration-300 ${
         scrolled
           ? "glass shadow-soft border-b border-outline-variant/20"
           : "bg-transparent border-b border-transparent"
@@ -86,7 +86,7 @@ export default function TopAppBar({ onMenuClick }: TopAppBarProps) {
 
       <div className="flex items-center gap-2 sm:gap-3">
         <a
-          href="https://unesta-host-dashboard.vercel.app"
+          href="https://unesta-host.vercel.app/login"
           target="_blank"
           rel="noopener noreferrer"
           className="hidden lg:inline-flex items-center justify-center py-2 px-4 rounded-full bg-primary text-white text-sm font-semibold press hover:brightness-105 shadow-soft"

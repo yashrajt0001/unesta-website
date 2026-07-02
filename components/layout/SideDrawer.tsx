@@ -158,7 +158,7 @@ export default function SideDrawer({ open, onClose }: SideDrawerProps) {
             <div className="h-px bg-outline-variant/30 my-3" />
 
             <DrawerLink
-              href="https://unesta-host-dashboard.vercel.app"
+              href="https://unesta-host.vercel.app/login"
               icon="home_work"
               label="Become a host"
               onClose={onClose}

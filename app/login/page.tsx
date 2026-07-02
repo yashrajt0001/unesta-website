@@ -284,29 +284,6 @@ function LoginInner() {
               </form>
             )}
 
-            <div className="relative my-8 text-center">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full h-px bg-outline-variant/30" />
-              </div>
-              <span className="relative px-4 bg-surface-container-lowest text-xs font-bold uppercase tracking-widest text-on-surface-variant/60">
-                or continue with
-              </span>
-            </div>
-
-            <button
-              type="button"
-              disabled
-              title="Google sign-in coming soon"
-              className="w-full flex items-center justify-center gap-3 px-6 py-3.5 bg-surface-container-low rounded-2xl group disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              <span className="material-symbols-outlined text-on-surface-variant">
-                mail
-              </span>
-              <span className="font-medium text-on-surface">
-                Google (coming soon)
-              </span>
-            </button>
-
             <p className="mt-8 text-center text-sm text-on-surface-variant">
               New to UNesta? Signing in with a new number will create your
               account automatically.

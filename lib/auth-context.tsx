@@ -25,7 +25,6 @@ interface AuthContextValue {
     phone: string,
     otp: string,
   ) => Promise<{ isNewUser: boolean }>;
-  loginWithGoogle: (idToken: string) => Promise<{ isNewUser: boolean }>;
   logout: () => void;
   refreshUser: () => Promise<void>;
 }
@@ -63,13 +62,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { isNewUser: result.isNewUser };
   }, []);
 
-  const loginWithGoogle = useCallback(async (idToken: string) => {
-    const result = await authApi.googleLogin(idToken);
-    setAuthToken(result.accessToken);
-    setUser(result.user);
-    return { isNewUser: result.isNewUser };
-  }, []);
-
   const logout = useCallback(() => {
     clearAuthToken();
     setUser(null);
@@ -94,7 +86,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated: !!user,
         sendOtp,
         verifyOtp,
-        loginWithGoogle,
         logout,
         refreshUser,
       }}

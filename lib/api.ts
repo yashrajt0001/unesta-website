@@ -117,15 +117,18 @@ export type ListingDetails = Omit<ListingCard, "images"> & {
   images: { id: string; url: string; isCover: boolean }[];
 };
 
+// Mirrors the backend price-breakdown response (bookings.service priceBreakdownService).
+// `subtotal` is not sent by the server — derive it as basePricePerNight * numNights.
 export type PriceBreakdown = {
-  nights: number;
-  basePrice: number;
-  subtotal: number;
+  numNights: number;
+  numGuests: number;
+  basePricePerNight: number;
   cleaningFee: number;
-  guestServiceFee: number;
-  totalAmount: number;
+  serviceFee: number;
   hostServiceFee: number;
-  hostPayoutAmount: number;
+  totalPrice: number;
+  hostPayout: number;
+  currency: string;
 };
 
 export type Booking = {
@@ -250,15 +253,6 @@ export const authApi = {
       {
         method: "POST",
         body: JSON.stringify({ phone, otp }),
-      },
-    ),
-
-  googleLogin: (idToken: string) =>
-    request<{ user: AuthUser; accessToken: string; isNewUser: boolean }>(
-      `/api/auth/google`,
-      {
-        method: "POST",
-        body: JSON.stringify({ idToken }),
       },
     ),
 

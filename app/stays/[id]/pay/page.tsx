@@ -373,10 +373,14 @@ function PaymentInner() {
           <Row
             label={
               pricing
-                ? `${currency.format(listing.basePrice)} × ${pricing.nights} nights`
+                ? `${currency.format(listing.basePrice)} × ${pricing.numNights} nights`
                 : "Subtotal"
             }
-            value={pricing ? currency.format(pricing.subtotal) : "—"}
+            value={
+              pricing
+                ? currency.format(pricing.basePricePerNight * pricing.numNights)
+                : "—"
+            }
           />
           <Row
             label="Cleaning fee"
@@ -384,12 +388,12 @@ function PaymentInner() {
           />
           <Row
             label="Service fee"
-            value={currency.format(pricing?.guestServiceFee ?? 0)}
+            value={currency.format(pricing?.serviceFee ?? 0)}
           />
           <div className="pt-3 border-t border-outline-variant/20 flex justify-between items-baseline">
             <span className="font-bold">Total</span>
             <span className="text-2xl font-headline font-extrabold text-primary">
-              {currency.format(pricing?.totalAmount ?? listing.basePrice)}
+              {currency.format(pricing?.totalPrice ?? listing.basePrice)}
             </span>
           </div>
         </section>
