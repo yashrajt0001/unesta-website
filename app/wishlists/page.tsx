@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ApiError, wishlistsApi, type Wishlist } from "@/lib/api";
 import { useRequireAuth } from "@/lib/use-require-auth";
+import { useWishlist } from "@/lib/wishlist-context";
 import { useToast } from "@/lib/toast";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Reveal } from "@/components/ui/Reveal";
@@ -16,13 +17,12 @@ const currency = new Intl.NumberFormat("en-IN", {
 
 export default function WishlistsPage() {
   const { isLoading: authLoading, isAuthenticated } = useRequireAuth();
+  const { setSaved } = useWishlist();
   const toast = useToast();
 
   const [wishlists, setWishlists] = useState<Wishlist[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
-  const [newName, setNewName] = useState("");
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -43,25 +43,6 @@ export default function WishlistsPage() {
       cancelled = true;
     };
   }, [isAuthenticated]);
-
-  async function handleCreate(e: React.FormEvent) {
-    e.preventDefault();
-    const name = newName.trim();
-    if (!name) return;
-    setCreating(true);
-    try {
-      const created = await wishlistsApi.create(name);
-      setWishlists((current) => [...current, created]);
-      setNewName("");
-      toast.success(`Wishlist "${name}" created.`);
-    } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : "Could not create wishlist.",
-      );
-    } finally {
-      setCreating(false);
-    }
-  }
 
   async function handleDelete(id: string, name: string) {
     if (!confirm(`Delete wishlist "${name}"?`)) return;
@@ -86,6 +67,7 @@ export default function WishlistsPage() {
             : w,
         ),
       );
+      setSaved(listingId, false); // keep hearts elsewhere in sync
       toast.info("Removed from wishlist.");
     } catch (err) {
       toast.error(
@@ -118,27 +100,6 @@ export default function WishlistsPage() {
           Save your favourite stays and revisit them later.
         </p>
       </header>
-
-      <form
-        onSubmit={handleCreate}
-        className="flex gap-2 mb-7 p-2 bg-surface-container-low rounded-full focus-within:ring-2 focus-within:ring-primary/30 transition-shadow"
-      >
-        <input
-          type="text"
-          value={newName}
-          onChange={(e) => setNewName(e.target.value)}
-          placeholder="Create a new wishlist…"
-          maxLength={80}
-          className="flex-1 px-4 py-2.5 bg-transparent outline-none text-sm"
-        />
-        <button
-          type="submit"
-          disabled={creating || !newName.trim()}
-          className="px-5 py-2.5 bg-primary text-on-primary text-sm font-semibold rounded-full disabled:opacity-50 disabled:cursor-not-allowed press"
-        >
-          {creating ? "Creating…" : "Create"}
-        </button>
-      </form>
 
       {loading && (
         <div className="space-y-6">

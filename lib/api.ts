@@ -35,7 +35,7 @@ export class ApiError extends Error {
 type RequestOptions = RequestInit & { auth?: boolean };
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { auth = false, headers: extraHeaders, ...rest } = options;
+  const { auth = false, headers: extraHeaders, cache, ...rest } = options;
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -52,7 +52,10 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     response = await fetch(`${API_BASE_URL}${path}`, {
       ...rest,
       headers,
-      cache: "no-store",
+      // Public GETs pass cache: "default" so the browser honours the API's
+      // Cache-Control (instant back/forward + repeat-view loads). Everything
+      // else stays "no-store" so auth'd and mutation calls are never cached.
+      cache: cache ?? "no-store",
     });
   } catch {
     throw new ApiError("Network error. Check your connection and try again.", 0);
@@ -105,6 +108,8 @@ export type ListingCard = {
     lastName: string | null;
     avatarUrl: string | null;
   };
+  // Server-stamped: is this listing in the signed-in user's wishlist?
+  isSaved: boolean;
 };
 
 export type ListingDetails = Omit<ListingCard, "images"> & {
@@ -197,7 +202,9 @@ export async function fetchPublishedListings(params?: {
   qp.set("page", String(params?.page ?? 1));
   qp.set("limit", String(params?.limit ?? 12));
 
-  return request<ListingCard[]>(`/api/search/listings?${qp.toString()}`);
+  return request<ListingCard[]>(`/api/search/listings?${qp.toString()}`, {
+    cache: "default",
+  });
 }
 
 export type SearchSuggestion = {
@@ -208,17 +215,23 @@ export type SearchSuggestion = {
 
 export async function fetchSearchSuggestions(q: string) {
   const qp = new URLSearchParams({ q });
-  return request<SearchSuggestion[]>(`/api/search/suggestions?${qp.toString()}`);
+  return request<SearchSuggestion[]>(
+    `/api/search/suggestions?${qp.toString()}`,
+    { cache: "default" },
+  );
 }
 
 export async function fetchListingDetails(id: string) {
-  return request<ListingDetails>(`/api/listings/${id}`);
+  return request<ListingDetails>(`/api/listings/${id}`, { cache: "default" });
 }
 
 /** Dates (YYYY-MM-DD) that cannot be booked: host-blocked + already-booked. */
 export async function fetchUnavailableDates(id: string, from: string, to: string) {
   const qp = new URLSearchParams({ from, to });
-  return request<string[]>(`/api/listings/${id}/unavailable-dates?${qp.toString()}`);
+  return request<string[]>(
+    `/api/listings/${id}/unavailable-dates?${qp.toString()}`,
+    { cache: "default" },
+  );
 }
 
 export async function fetchPriceBreakdown(input: {

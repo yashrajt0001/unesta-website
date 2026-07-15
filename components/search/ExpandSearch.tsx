@@ -389,30 +389,6 @@ export default function ExpandSearch() {
 
           {active === "when" && (
             <Popover key="pop-when" anchor="center" wide>
-              <div className="flex items-center justify-center mb-4">
-                <div className="inline-flex bg-surface-container-high rounded-full p-1">
-                  <button
-                    type="button"
-                    className="relative px-5 py-1.5 text-sm font-semibold rounded-full text-on-surface"
-                  >
-                    <motion.span
-                      layoutId="dateTab"
-                      className="absolute inset-0 rounded-full bg-surface-container-lowest shadow-soft"
-                      transition={{ type: "spring", stiffness: 420, damping: 34 }}
-                    />
-                    <span className="relative">Dates</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="relative px-5 py-1.5 text-sm font-semibold rounded-full text-on-surface-variant"
-                    disabled
-                    title="Coming soon"
-                  >
-                    <span className="relative">Flexible</span>
-                  </button>
-                </div>
-              </div>
-
               <div className="relative grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <button
                   type="button"

@@ -82,7 +82,7 @@ export function StayCard({
             className="absolute top-3 right-3"
             style={{ transform: "translateZ(40px)" }}
           >
-            <WishlistHeart listingId={stay.id} />
+            <WishlistHeart listingId={stay.id} initialSaved={stay.isSaved} />
           </div>
 
           {/* hover image-cycle hotspots + dot indicator */}

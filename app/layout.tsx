@@ -4,6 +4,7 @@ import "./globals.css";
 import AppShell from "@/components/layout/AppShell";
 import { AuthProvider } from "@/lib/auth-context";
 import { ToastProvider } from "@/lib/toast";
+import { WishlistProvider } from "@/lib/wishlist-context";
 
 // Clean, readable workhorse for all body & UI text
 const roboto = Roboto({
@@ -36,6 +37,14 @@ export default function RootLayout({
       className={`${roboto.variable} ${poppins.variable} light`}
     >
       <head>
+        {/* Warm up the font CDN connections before the blocking stylesheet
+            request so TLS/DNS isn't on the critical path. */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link
+          rel="preconnect"
+          href="https://fonts.gstatic.com"
+          crossOrigin="anonymous"
+        />
         {/* Material Symbols icon font */}
         <link
           rel="stylesheet"
@@ -45,7 +54,9 @@ export default function RootLayout({
       <body className="bg-surface font-body text-on-surface antialiased">
         <AuthProvider>
           <ToastProvider>
-            <AppShell>{children}</AppShell>
+            <WishlistProvider>
+              <AppShell>{children}</AppShell>
+            </WishlistProvider>
           </ToastProvider>
         </AuthProvider>
       </body>
