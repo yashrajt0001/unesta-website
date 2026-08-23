@@ -1,15 +1,17 @@
 import Link from "next/link";
+import UnestaLogo from "@/components/brand/Logo";
 
 export default function Footer() {
   return (
     <footer className="bg-surface-container-low px-4 sm:px-6 py-8 sm:py-12 space-y-8 sm:space-y-10 border-t border-outline-variant/20">
       {/* Brand */}
       <div className="space-y-2">
-        <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-          <span className="material-symbols-outlined text-primary text-sm">travel_explore</span>
-          <h2 className="text-lg sm:text-2xl font-headline font-extrabold tracking-tight text-on-surface">
-            UNesta
-          </h2>
+        <Link
+          href="/"
+          aria-label="Unesta home"
+          className="inline-flex hover:opacity-80 transition-opacity text-on-surface"
+        >
+          <UnestaLogo className="text-lg sm:text-2xl" />
         </Link>
         <p className="text-on-surface-variant text-xs sm:text-sm font-medium">
           Curating moments that stay with you forever.

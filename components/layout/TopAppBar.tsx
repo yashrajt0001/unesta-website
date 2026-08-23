@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "motion/react";
 import { useAuth } from "@/lib/auth-context";
+import UnestaLogo from "@/components/brand/Logo";
 
 interface TopAppBarProps {
   onMenuClick: () => void;
@@ -36,13 +37,8 @@ export default function TopAppBar({ onMenuClick }: TopAppBarProps) {
           : "bg-transparent border-b border-transparent"
       }`}
     >
-      <Link href="/" className="flex items-center gap-2 press">
-        <span className="material-symbols-outlined text-primary icon-md sm:icon-lg">
-          travel_explore
-        </span>
-        <h1 className="text-lg sm:text-2xl font-bold text-on-surface font-headline tracking-tight">
-          UNesta
-        </h1>
+      <Link href="/" aria-label="Unesta home" className="flex items-center press text-on-surface">
+        <UnestaLogo className="text-[17px] sm:text-xl" />
       </Link>
 
       <div className="hidden lg:flex items-center gap-1 bg-surface-container-low/70 rounded-full p-1 border border-outline-variant/20">

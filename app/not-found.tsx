@@ -1,12 +1,11 @@
 import Link from "next/link";
+import { UnestaMark } from "@/components/brand/Logo";
 
 export default function NotFound() {
   return (
     <main className="min-h-[60vh] flex items-center justify-center px-6 py-16">
       <div className="max-w-md text-center space-y-4 animate-fade-up">
-        <span className="material-symbols-outlined text-6xl text-primary">
-          travel_explore
-        </span>
+        <UnestaMark className="mx-auto block h-16 w-auto text-primary" />
         <h1 className="font-headline text-3xl sm:text-4xl font-semibold tracking-tight">
           We couldn’t find that page
         </h1>

@@ -140,6 +140,7 @@ export type Booking = {
   id: string;
   status:
     | "PENDING"
+    | "AWAITING_HOST"
     | "CONFIRMED"
     | "CHECKED_IN"
     | "COMPLETED"
@@ -151,6 +152,8 @@ export type Booking = {
   checkOutDate: string;
   numGuests: number;
   totalAmount: number;
+  bookingType: "INSTANT" | "REQUEST";
+  hostResponseDeadline: string | null;
   listing: {
     id: string;
     title: string;

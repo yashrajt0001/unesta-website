@@ -24,7 +24,11 @@ const STATUS_TABS: { key: "all" | "upcoming" | "past" | "cancelled"; label: stri
 const STATUS_LABELS: Record<Booking["status"], { label: string; tone: string }> =
   {
     PENDING: {
-      label: "Pending host approval",
+      label: "Payment pending",
+      tone: "bg-tertiary-container text-on-tertiary-container",
+    },
+    AWAITING_HOST: {
+      label: "Awaiting host confirmation",
       tone: "bg-tertiary-container text-on-tertiary-container",
     },
     CONFIRMED: {
@@ -222,7 +226,9 @@ function TripCard({
     "https://via.placeholder.com/600x400?text=No+Image";
   const status = STATUS_LABELS[booking.status];
   const cancellable =
-    booking.status === "PENDING" || booking.status === "CONFIRMED";
+    booking.status === "PENDING" ||
+    booking.status === "AWAITING_HOST" ||
+    booking.status === "CONFIRMED";
   const fmt = (d: string) =>
     new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 
@@ -253,6 +259,12 @@ function TripCard({
             {status.label}
           </span>
         </div>
+        {booking.status === "AWAITING_HOST" && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-tertiary-container/40 text-on-tertiary-container text-sm">
+            <span className="material-symbols-outlined text-[18px]">schedule</span>
+            <HostResponseCountdown deadline={booking.hostResponseDeadline} />
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-2 text-sm">
           <div>
             <p className="text-[10px] uppercase font-bold tracking-wider text-on-surface-variant">
@@ -290,5 +302,37 @@ function TripCard({
         </div>
       </div>
     </article>
+  );
+}
+
+// Live countdown on a paid booking the host has not confirmed yet. When it runs out
+// the API expires the booking and refunds the guest, so we say so rather than tick to
+// a stale zero.
+function HostResponseCountdown({ deadline }: { deadline: string | null }) {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  if (!deadline) return <span>Waiting for the host to confirm.</span>;
+
+  const msLeft = new Date(deadline).getTime() - now;
+  if (msLeft <= 0) {
+    return <span>Time is up — your full refund is being processed.</span>;
+  }
+
+  const minutes = Math.floor(msLeft / 60000);
+  const seconds = Math.floor((msLeft % 60000) / 1000);
+
+  return (
+    <span>
+      Host has{" "}
+      <span className="font-bold tabular-nums">
+        {minutes}:{String(seconds).padStart(2, "0")}
+      </span>{" "}
+      to confirm — full refund if they don&apos;t.
+    </span>
   );
 }

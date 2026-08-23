@@ -1,5 +1,7 @@
 import type { NextConfig } from "next";
 
+const R2_HOSTNAME = process.env.NEXT_PUBLIC_R2_HOSTNAME;
+
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
@@ -9,10 +11,10 @@ const nextConfig: NextConfig = {
     // Cache optimized images at the edge for a day before revalidating.
     minimumCacheTTL: 86400,
     remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: 'res.cloudinary.com',
-      },
+      // Cloudflare R2 public bucket. The r2.dev subdomain covers development;
+      // NEXT_PUBLIC_R2_HOSTNAME points at the custom CDN domain in production.
+      { protocol: 'https', hostname: '**.r2.dev' },
+      ...(R2_HOSTNAME ? [{ protocol: 'https' as const, hostname: R2_HOSTNAME }] : []),
     ],
   },
   experimental: {

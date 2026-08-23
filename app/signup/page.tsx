@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import UnestaLogo from "@/components/brand/Logo";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/lib/toast";
@@ -194,9 +195,7 @@ function SignupInner() {
           >
             <span className="material-symbols-outlined">close</span>
           </Link>
-          <span className="font-headline font-bold text-xl tracking-tighter">
-            UNesta
-          </span>
+          <UnestaLogo className="text-[17px] text-on-surface" />
           <div className="w-6" />
         </div>
       </nav>

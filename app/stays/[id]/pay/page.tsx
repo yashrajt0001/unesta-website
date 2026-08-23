@@ -26,6 +26,10 @@ const currency = new Intl.NumberFormat("en-IN", {
 const shortDate = (d: string) =>
   new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
+// Mirrors HOST_RESPONSE_WINDOW_MINUTES in the API — how long a host has to confirm
+// a request-to-book stay before the guest is automatically refunded in full.
+const HOST_RESPONSE_WINDOW_MINUTES = 30;
+
 function isValidEmail(s: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim());
 }
@@ -192,7 +196,11 @@ function PaymentInner() {
               razorpayPaymentId: resp.razorpay_payment_id,
               razorpaySignature: resp.razorpay_signature,
             });
-            toast.success("Payment successful — your booking is confirmed!");
+            toast.success(
+              listing?.instantBook
+                ? "Payment successful — your booking is confirmed!"
+                : `Payment received — the host has ${HOST_RESPONSE_WINDOW_MINUTES} minutes to confirm.`,
+            );
             router.push("/trips");
           } catch (err) {
             toast.error(
@@ -398,17 +406,47 @@ function PaymentInner() {
           </div>
         </section>
 
+        {listing.instantBook ? (
+          <section className="flex gap-3 p-4 rounded-2xl bg-secondary-container/40 text-on-secondary-container">
+            <span className="material-symbols-outlined text-[20px] flex-shrink-0">
+              bolt
+            </span>
+            <p className="text-sm leading-relaxed">
+              <span className="font-bold">Instant Book.</span> This host accepts
+              bookings automatically — your stay is confirmed the moment your
+              payment goes through.
+            </p>
+          </section>
+        ) : (
+          <section className="flex gap-3 p-4 rounded-2xl bg-tertiary-container/40 text-on-tertiary-container">
+            <span className="material-symbols-outlined text-[20px] flex-shrink-0">
+              schedule
+            </span>
+            <p className="text-sm leading-relaxed">
+              The host has {HOST_RESPONSE_WINDOW_MINUTES} minutes to accept your
+              request. You&apos;ll pay now, but get a full refund if the booking
+              isn&apos;t confirmed.
+            </p>
+          </section>
+        )}
+
         <div>
           <button
             type="submit"
             disabled={submitting}
             className="w-full py-4 bg-primary text-on-primary font-bold text-base rounded-full shadow-glow-primary press hover:brightness-105 disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            {submitting ? "Processing…" : "Pay & confirm booking"}
+            {submitting
+              ? "Processing…"
+              : listing.instantBook
+                ? "Pay & confirm booking"
+                : "Pay & request booking"}
           </button>
           <p className="text-center text-xs text-on-surface-variant mt-3 leading-relaxed">
-            You&apos;ll be redirected to our secure payment gateway. Your booking
-            is confirmed only after payment succeeds.
+            You&apos;ll be redirected to our secure payment gateway.{" "}
+            {listing.instantBook
+              ? "Your booking is confirmed only after payment succeeds."
+              : `If the host doesn't confirm within ${HOST_RESPONSE_WINDOW_MINUTES} minutes, you're refunded in full automatically.`}
             <br />
             By paying, you agree to UNesta&apos;s{" "}
             <a className="underline text-primary" href="#">

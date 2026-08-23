@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import UnestaLogo from "@/components/brand/Logo";
 import { useToast } from "@/lib/toast";
 
 interface SideDrawerProps {
@@ -68,14 +69,7 @@ export default function SideDrawer({ open, onClose }: SideDrawerProps) {
       >
         <div className="p-6 flex flex-col h-full">
           <div className="flex justify-between items-center mb-6">
-            <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-primary">
-                travel_explore
-              </span>
-              <h2 className="text-lg font-bold font-headline tracking-tight">
-                UNesta
-              </h2>
-            </div>
+            <UnestaLogo className="text-[17px] text-on-surface" />
             <button
               ref={closeButtonRef}
               type="button"
