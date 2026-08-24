@@ -151,7 +151,7 @@ export type Booking = {
   checkInDate: string;
   checkOutDate: string;
   numGuests: number;
-  totalAmount: number;
+  totalPrice: number;
   bookingType: "INSTANT" | "REQUEST";
   hostResponseDeadline: string | null;
   listing: {

@@ -279,7 +279,7 @@ function TripCard({
               Guests · Total
             </p>
             <p className="font-semibold">
-              {booking.numGuests} · {currency.format(booking.totalAmount)}
+              {booking.numGuests} · {currency.format(booking.totalPrice)}
             </p>
           </div>
         </div>
